@@ -21,7 +21,7 @@ export async function broadcastRoomEvent(sessionId: string, event: RoomBroadcast
   const client = getSupabaseAdminClient();
   const channel = client.channel(roomChannel(sessionId));
   try {
-    await channel.send({ type: "broadcast", event: "room-event", payload: event });
+    await channel.httpSend("room-event", event);
   } finally {
     await client.removeChannel(channel);
   }
@@ -131,8 +131,12 @@ export async function submitVote(
     content: String(reactionRow.content),
     createdAt: String(reactionRow.created_at),
   };
-  await broadcastRoomEvent(sessionId, { type: "vote-tally", tally, option });
-  await broadcastRoomEvent(sessionId, { type: "persona-reaction", message, tally, option });
+  await broadcastRoomEvent(sessionId, {
+    type: "persona-reaction",
+    message,
+    tally,
+    option,
+  });
 
   return { tally, message };
 }

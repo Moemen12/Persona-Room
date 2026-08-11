@@ -1,7 +1,7 @@
 "use client";
 
 import { Heart, LoaderCircle, Radio, Sparkles, Users, Volume2, VolumeX } from "lucide-react";
-import { useReducer } from "react";
+import { useReducer, useState } from "react";
 
 import type { RoomBroadcast, RoomSnapshot, VoteTally } from "@/features/audience/audience.types";
 import type { PersonaMood } from "@/features/persona/persona.types";
@@ -55,9 +55,10 @@ function audienceReducer(state: AudienceState, action: AudienceAction): Audience
   if (!state.snapshot) return state;
 
   const { event } = action;
-  const nextMessages = event.message
-    ? [...state.snapshot.messages, event.message]
-    : state.snapshot.messages;
+  const nextMessages =
+    event.message && !state.snapshot.messages.some((message) => message.id === event.message?.id)
+      ? [...state.snapshot.messages, event.message]
+      : state.snapshot.messages;
   return {
     ...state,
     submitting: event.type === "vote-tally" ? undefined : state.submitting,
@@ -81,7 +82,12 @@ function audienceLabel(viewerCount: number) {
 
 export function AudienceExperience({ roomId }: { roomId: string }) {
   const [state, dispatch] = useReducer(audienceReducer, initialState);
+  const [isHydrated, setIsHydrated] = useState(false);
   const { play, setSoundEnabled, soundEnabled } = useInterfaceSound();
+
+  useMountEffect(() => {
+    setIsHydrated(true);
+  });
 
   useMountEffect(() => {
     const controller = new AbortController();
@@ -223,7 +229,7 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
                     className={cn("vote-option", selected && "vote-option--selected")}
                     type="button"
                     onClick={() => void vote(option.value)}
-                    disabled={!state.snapshot || Boolean(state.submitting)}
+                    disabled={!isHydrated || !state.snapshot || Boolean(state.submitting)}
                   >
                     <span className="vote-option__main">
                       <span className="vote-option__emoji">{option.emoji}</span>

@@ -140,11 +140,11 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 .composer__send:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-2px) scale(1.02); }
 .composer__send--stop { color: var(--lavender); background: rgba(196, 181, 253, 0.16); box-shadow: none; }
 
-.audience-room { width: min(100%, 1150px); }
-.audience-header { min-height: 90px; margin-bottom: 18px; }
+.audience-room { display: grid; width: min(100%, 1150px); grid-template-columns: minmax(0, 1fr) minmax(290px, 350px); grid-template-areas: "header header" "spotlight vote" "transcript vote"; align-items: start; gap: 21px; }
+.audience-header { grid-area: header; min-height: 72px; margin: 0; }
 .audience-header h1 { font-size: clamp(2.4rem, 5vw, 4.2rem); line-height: 0.95; }
 .audience-viewers { display: inline-flex; align-items: center; gap: 7px; min-height: 39px; border: 1px solid var(--line); border-radius: 13px; padding: 0 12px; color: var(--lavender); background: rgba(20, 15, 43, 0.54); font-size: 0.72rem; font-weight: 720; white-space: nowrap; }
-.audience-spotlight { display: flex; align-items: center; gap: 22px; overflow: hidden; min-height: 157px; margin-bottom: 24px; border-radius: 27px; padding: 18px clamp(20px, 3vw, 38px); }
+.audience-spotlight { grid-area: spotlight; display: flex; align-items: center; gap: 22px; overflow: hidden; min-height: 150px; margin: 0; border-radius: 27px; padding: 18px clamp(20px, 3vw, 38px); }
 .audience-spotlight__avatar { position: relative; }
 .audience-spotlight__avatar::before { position: absolute; inset: -20px; border-radius: 50%; background: radial-gradient(circle, rgba(143, 91, 255, 0.25), transparent 70%); content: ""; }
 .audience-spotlight__copy { display: grid; gap: 9px; }
@@ -154,13 +154,13 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 .audience-spotlight__mood { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: rgba(221, 214, 254, 0.68); font-size: 0.75rem; }
 .audience-spotlight__mood svg { color: #d7baff; }
 .audience-spotlight__mood strong { color: var(--lavender); }
-.audience-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, 350px); align-items: start; gap: 21px; }
-.audience-transcript { overflow: hidden; border-radius: 27px; }
+.audience-layout { display: contents; }
+.audience-transcript { grid-area: transcript; overflow: hidden; border-radius: 27px; }
 .audience-transcript__header > span:first-child { display: inline-flex; align-items: center; gap: 7px; color: var(--lavender); }
-.audience-transcript__body { display: flex; min-height: 540px; height: min(65vh, 680px); flex-direction: column; gap: 12px; overflow-y: auto; padding: 20px; scrollbar-color: rgba(203, 182, 255, 0.38) transparent; }
+.audience-transcript__body { display: flex; min-height: 410px; height: min(53vh, 570px); flex-direction: column; gap: 12px; overflow-y: auto; padding: 20px; scrollbar-color: rgba(203, 182, 255, 0.38) transparent; }
 .audience-transcript .message-bubble { margin: 0; }
 .audience-transcript .message-bubble--user { margin-left: auto; }
-.vote-panel { position: sticky; top: 24px; overflow: hidden; border-radius: 27px; padding: 22px; }
+.vote-panel { grid-area: vote; position: sticky; top: 24px; overflow: hidden; border-radius: 27px; padding: 22px; }
 .vote-panel::before { position: absolute; top: -40px; right: -55px; width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(circle, rgba(165, 117, 255, 0.2), transparent 70%); content: ""; pointer-events: none; }
 .vote-panel__header { position: relative; align-items: flex-start; margin-bottom: 10px; }
 .vote-panel h2 { max-width: 215px; font-size: 1.65rem; line-height: 0.98; }
@@ -200,8 +200,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   .persona-profile__status, .persona-profile__mood { grid-column: 1 / -1; justify-content: flex-start; margin-top: 18px; }
   .persona-profile__mood { border-bottom: 0; padding-bottom: 0; }
   .chat-card { min-height: 560px; }
-  .audience-layout { grid-template-columns: 1fr; }
-  .vote-panel { position: relative; top: auto; order: -1; }
+  .audience-room { grid-template-columns: 1fr; grid-template-areas: "header" "vote" "spotlight" "transcript"; gap: 16px; }
+  .audience-layout { display: contents; }
+  .vote-panel { position: relative; top: auto; }
   .audience-transcript__body { height: min(57vh, 590px); }
 }
 
@@ -229,21 +230,25 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   .composer__meta { right: 68px; bottom: 18px; font-size: 0.53rem; }
   .composer__meta span + span { display: none; }
   .composer__send { width: 47px; height: 47px; border-radius: 15px; }
-  .audience-header { min-height: 68px; align-items: flex-end; margin-bottom: 14px; }
+  .audience-header { min-height: 58px; align-items: flex-end; margin: 0; }
   .audience-header h1 { font-size: 2.28rem; }
   .audience-header__actions { gap: 7px; }
   .audience-viewers { max-width: 123px; min-height: 39px; overflow: hidden; padding: 0 9px; font-size: 0.63rem; text-overflow: ellipsis; white-space: nowrap; }
-  .audience-spotlight { gap: 14px; min-height: 130px; margin-bottom: 15px; padding: 15px; }
+  .audience-spotlight { gap: 14px; min-height: 118px; margin: 0; padding: 15px; }
   .rina-avatar--room { width: 88px; height: 88px; }
   .audience-spotlight__copy p { font-size: 0.96rem; }
   .audience-spotlight__copy > span:last-child { font-size: 0.7rem; }
   .audience-spotlight__mood { display: none; }
-  .audience-layout { gap: 15px; }
-  .vote-panel { padding: 17px; }
+  .audience-layout { display: contents; }
+  .vote-panel { padding: 15px; }
   .vote-panel h2 { font-size: 1.42rem; }
-  .vote-panel__description { margin-bottom: 14px; }
-  .vote-option { padding: 11px 11px 8px; }
-  .vote-option__main { font-size: 0.79rem; }
+  .vote-panel__description { display: none; }
+  .vote-options { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vote-option { min-height: 55px; padding: 9px; }
+  .vote-option__main { gap: 6px; font-size: 0.72rem; line-height: 1.1; }
+  .vote-option__emoji { width: 22px; height: 22px; font-size: 0.82rem; }
+  .vote-option__track { display: none; }
+  .vote-panel__foot { display: none; }
   .audience-transcript__body { min-height: 400px; height: 51vh; padding: 14px; }
 }
 
