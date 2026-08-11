@@ -200,7 +200,8 @@ export function ChatExperience() {
           signal: controller.signal,
         });
         if (!response.ok) throw new Error("Session setup failed");
-        const bootstrap = (await response.json()) as SessionBootstrap;
+        const result = (await response.json()) as { data: SessionBootstrap };
+        const bootstrap = result.data;
         if (controller.signal.aborted) return;
         const identity = { bootstrap, accessToken: session.access_token };
         window.sessionStorage.setItem(
@@ -285,7 +286,8 @@ export function ChatExperience() {
       });
       if (!bootstrapResponse.ok) throw new Error("Companion refresh failed");
       stop();
-      const bootstrap = (await bootstrapResponse.json()) as SessionBootstrap;
+      const bootstrapResult = (await bootstrapResponse.json()) as { data: SessionBootstrap };
+      const bootstrap = bootstrapResult.data;
       setMessages(bootstrap.messages.map(asUiMessage));
       dispatch({ type: "companion-updated", bootstrap, mood: bootstrap.mood });
       if (composerRef.current) composerRef.current.style.height = "50px";
