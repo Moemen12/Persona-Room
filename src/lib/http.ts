@@ -3,6 +3,10 @@ import { ZodError, type ZodIssue } from "zod";
 
 import { AppError } from "@/lib/errors";
 
+export function createSuccessResponse<T>(data: T, status = 200) {
+  return NextResponse.json({ data }, { status });
+}
+
 export function createErrorResponse(error: unknown) {
   if (error instanceof ZodError) {
     const details = error.issues.map((e: ZodIssue) => ({

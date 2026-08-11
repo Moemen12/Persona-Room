@@ -5,7 +5,7 @@ import { getSessionBootstrap, updateSessionCompanion } from "@/features/auth/aut
 import { COMPANION_IDS } from "@/features/persona/persona.types";
 import { getSupabaseAuthUser } from "@/infrastructure/supabase/server";
 import { MethodNotAllowedError } from "@/lib/errors";
-import { createErrorResponse } from "@/lib/http";
+import { createErrorResponse, createSuccessResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,8 @@ export async function POST(request: Request) {
     const accessToken = getAccessToken(request);
     if (!accessToken) return new Response(null, { status: 401 });
     const authUser = await getSupabaseAuthUser(accessToken);
-    return Response.json(await getSessionBootstrap(authUser.id));
+    const bootstrap = await getSessionBootstrap(authUser.id);
+    return createSuccessResponse(bootstrap);
   } catch (error) {
     return createErrorResponse(error);
   }
@@ -37,7 +38,7 @@ export async function PUT(request: Request) {
     const authUser = await getSupabaseAuthUser(accessToken);
     const session = await updateSessionCompanion(input.sessionId, authUser.id, input.companionId);
     await broadcastRoomEvent(session.id, { type: "companion-changed", companionId: session.companionId });
-    return Response.json({ session });
+    return createSuccessResponse({ session });
   } catch (error) {
     return createErrorResponse(error);
   }

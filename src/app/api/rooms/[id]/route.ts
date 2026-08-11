@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { getRoomSnapshot } from "@/features/audience/audience.service";
 import { MethodNotAllowedError } from "@/lib/errors";
-import { createErrorResponse } from "@/lib/http";
+import { createErrorResponse, createSuccessResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,8 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
   try {
     const { id } = await context.params;
     const validatedParams = paramsSchema.parse({ id });
-    return Response.json(await getRoomSnapshot(validatedParams.id));
+    const snapshot = await getRoomSnapshot(validatedParams.id);
+    return createSuccessResponse(snapshot);
   } catch (error) {
     return createErrorResponse(error);
   }
