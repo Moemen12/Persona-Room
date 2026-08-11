@@ -1,67 +1,46 @@
-export type Mood = 'neutral' | 'happy' | 'surprised' | 'sad/thoughtful';
+export class AppError extends Error {
+  readonly status: number;
+  readonly code: string;
 
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-  };
+  constructor(message: string, code: string, status: number) {
+    super(message);
+    this.name = "AppError";
+    this.code = code;
+    this.status = status;
+  }
 }
 
-export class AppError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    public statusCode: number = 400,
-  ) {
-    super(message);
-    this.name = 'AppError';
+export class AuthenticationError extends AppError {
+  constructor() {
+    super("Your session needs to be refreshed.", "UNAUTHENTICATED", 401);
+    this.name = "AuthenticationError";
   }
 }
 
 export class NotFoundError extends AppError {
-  constructor(resource: string, id: string | number) {
-    super('NOT_FOUND', `${resource} with id ${id} not found`, 404);
-    this.name = 'NotFoundError';
+  constructor(resource: string) {
+    super(`${resource} was not found.`, "NOT_FOUND", 404);
+    this.name = "NotFoundError";
   }
 }
 
-export class UnauthorizedError extends AppError {
-  constructor(message = 'Unauthorized') {
-    super('UNAUTHORIZED', message, 401);
-    this.name = 'UnauthorizedError';
+export class RateLimitError extends AppError {
+  constructor() {
+    super("Slow down a second, the room is still catching up.", "RATE_LIMITED", 429);
+    this.name = "RateLimitError";
   }
 }
 
-export class ValidationError extends AppError {
-  constructor(message: string, public details?: Record<string, string[]>) {
-    super('VALIDATION_ERROR', message, 400);
-    this.name = 'ValidationError';
+export class BudgetExceededError extends AppError {
+  constructor() {
+    super("Demo on pause — back soon.", "BUDGET_EXCEEDED", 429);
+    this.name = "BudgetExceededError";
   }
 }
 
-export function createApiResponse<T>(data: T): ApiResponse<T> {
-  return { success: true, data };
-}
-
-export function createApiError(error: unknown): ApiResponse {
-  if (error instanceof AppError) {
-    return {
-      success: false,
-      error: { code: error.code, message: error.message },
-    };
+export class ConfigurationError extends AppError {
+  constructor() {
+    super("This room is not configured yet.", "CONFIGURATION_ERROR", 503);
+    this.name = "ConfigurationError";
   }
-
-  if (error instanceof Error) {
-    return {
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: error.message },
-    };
-  }
-
-  return {
-    success: false,
-    error: { code: 'UNKNOWN_ERROR', message: 'An unknown error occurred' },
-  };
 }

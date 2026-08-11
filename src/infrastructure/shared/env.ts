@@ -1,41 +1,46 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-const envSchema = z.object({
-  // Supabase
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url('Invalid Supabase URL'),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, 'Supabase anon key required'),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'Supabase service role key required'),
+import { ConfigurationError } from "@/lib/errors";
 
-  // Gemini
-  GEMINI_API_KEY: z.string().min(1, 'Gemini API key required'),
-
-  // Upstash Redis
-  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
-
-  // Node environment
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+const publicEnvironmentSchema = z.object({
+  NEXT_PUBLIC_SUPABASE_URL: z.url(),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: z.string().min(1),
+  NEXT_PUBLIC_BASE_URL: z.url(),
 });
 
-type EnvConfig = z.infer<typeof envSchema>;
+const serverEnvironmentSchema = publicEnvironmentSchema.extend({
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  UPSTASH_REDIS_REST_URL: z.url(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1),
+  OPENAI_API_KEY: z.string().min(1),
+});
 
-let cachedEnv: EnvConfig | null = null;
-
-export function getEnv(): EnvConfig {
-  if (cachedEnv) return cachedEnv;
-
-  const result = envSchema.safeParse(process.env);
-
-  if (!result.success) {
-    const errors = result.error.flatten();
-    console.error('Environment validation failed:', errors);
-    throw new Error(
-      `Invalid environment variables: ${JSON.stringify(errors.fieldErrors)}`,
-    );
+function parseEnvironment<T>(schema: z.ZodType<T>, values: Record<string, unknown>) {
+  const parsed = schema.safeParse(values);
+  if (!parsed.success) {
+    throw new ConfigurationError();
   }
-
-  cachedEnv = result.data;
-  return cachedEnv;
+  return parsed.data;
 }
 
-export const env = getEnv();
+export function getPublicEnvironment() {
+  return parseEnvironment(publicEnvironmentSchema, {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
+    NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
+  });
+}
+
+export function getServerEnvironment() {
+  return parseEnvironment(serverEnvironmentSchema, {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
+    NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  });
+}

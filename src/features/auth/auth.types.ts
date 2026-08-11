@@ -1,13 +1,28 @@
-export interface AuthUser {
+import type { PersonaMood } from "@/features/persona/persona.types";
+
+export interface PersonaUser {
   id: string;
-  email: string;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
+  supabaseAuthId: string;
+  displayName: string;
 }
 
-export interface AuthSession {
-  user: AuthUser;
-  accessToken: string;
-  refreshToken?: string;
+export interface PersonaSession {
+  id: string;
+  userId: string;
+  audienceEnabled: boolean;
+  createdAt: string;
+}
+
+export interface InitialChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
+export interface SessionBootstrap {
+  session: PersonaSession;
+  user: PersonaUser;
+  mood: PersonaMood;
+  messages: InitialChatMessage[];
 }

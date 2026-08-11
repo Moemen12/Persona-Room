@@ -1,22 +1,16 @@
-import type { Metadata } from 'next';
-import { AuthProvider } from '@/presentation/contexts/AuthContext';
-import '@/presentation/styles/globals.css';
+import type { Metadata } from "next";
+
+import "@/presentation/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: 'Persona Room',
-  description: 'Chat with Rina, a virtual artist with genuine personality',
+  title: "Persona Room — Rina is listening",
+  description: "A live virtual persona experience built for Aria Studios.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
-        <AuthProvider>{children}</AuthProvider>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

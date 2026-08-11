@@ -1,209 +1,53 @@
-# AGENTS.md — Persona Room Project Guidelines
+# Persona Room — Project Guidance
 
-This file defines persistent repository instructions for development in this project.
+This file defines persistent repository instructions for contributors working in Persona Room.
 
-## Working Style
+## How to Use This Repository Guidance
 
-**Prefer making the change directly instead of stopping at analysis.** Explain tradeoffs clearly when a decision has hidden product, security, or maintenance consequences.
+Keep this file practical, specific, and short enough to stay readable. It records repeatable project expectations, while one-off task workflows belong in dedicated documentation. Make the change directly when the requirements are clear, and explain meaningful security, product, or maintenance tradeoffs when they affect the result.
 
-**Code from a senior software engineer mindset:** explicit, reliable, bounded, and maintainable. Do not code like a junior or a vibe coder. Avoid speculative abstractions, "just in case" state, and unclear control flow.
+## Working Style and Worktree Safety
 
-**Keep code simple and maintainable;** avoid cleverness unless it clearly reduces complexity.
+Build with a senior engineering mindset: explicit, reliable, bounded, maintainable, and free of speculative abstractions. Keep modules focused and split crowded files by responsibility rather than accumulating conditions. Reusable named types belong in nearby `*.types.ts` files when they have a clearer boundary outside a component, hook, service, or repository.
+
+The worktree can contain user changes. Never overwrite or revert user work without explicit permission. If unexpected changes appear in files being edited and make intent ambiguous, stop and surface the conflict.
 
 ## Architecture
 
-**Hybrid Clean + Feature-Based Structure:**
+Persona Room is a **Next.js App Router** application with a `src/` root. Keep pages and route handlers in `src/app`, domain behavior in `src/features`, infrastructure adapters and validated configuration in `src/infrastructure`, shared helpers in `src/lib`, and UI components and browser-facing hooks in `src/presentation`.
 
-```
-src/
-  app/                    # Route composition, layouts, route handlers
-  features/               # Domain slices: chat, persona, audience, auth
-    chat/
-      actions.ts          # Server actions / tRPC entry points
-      service.ts          # Business logic orchestration
-      repository.ts       # Data access layer
-      schemas.ts          # Zod validation schemas
-    persona/
-      ...
-    audience/
-      ...
-    auth/
-      ...
-  lib/                    # Cross-cutting utilities, shared helpers
-    errors.ts             # Typed domain errors
-    trpc.ts               # tRPC client setup
-    utils.ts              # General utilities
-  infrastructure/         # Framework config, DB schema, env
-    database/
-      schema.ts           # Drizzle schema
-    config/
-      env.ts              # Environment validation
-  presentation/           # UI components, hooks, styles
-    components/
-    hooks/
-    styles/
-```
+Keep correctness-sensitive business logic on the server or in feature repository/service layers. Components should stay presentational where practical; move orchestration into focused hooks or services. Prefer server components by default and add `"use client"` only where interactivity, browser APIs, client state, or client-only libraries actually require it.
 
-**Feature modules own their domain logic.** Presentation components consume features via tRPC procedures. Infrastructure provides framework adapters and database access.
+Centralize application and API paths in `src/infrastructure/config/routes.ts`. Centralize product constants such as message limits, cache TTLs, rate limits, and budget caps in `src/lib/config/app.ts`. Do not scatter hardcoded routes or runtime thresholds through feature and presentation code.
 
-**No framework APIs in features.** Next.js navigation, headers, cache APIs belong in `app/` routes or explicit server adapters. Feature code must be framework-light and testable.
+## React and Frontend Standards
 
-## Code Standards
+Favor intentional, premium, accessible UI over generic SaaS boilerplate. The product must work on desktop and mobile, with mobile prioritizing the main information and primary action. Preserve visible focus states and keyboard access.
 
-### React & Hooks
+Do not call `useEffect` directly in normal component code. Prefer derived render state, event handlers, server patterns, and remount semantics. Mount-only synchronization is permitted only for genuine external synchronization such as a browser subscription or third-party lifecycle; use a small named helper with cleanup when repeated. For async client synchronization, use `AbortController` cleanup and never commit results after the signal is aborted.
 
-**Do not call useEffect directly in normal component code.** Prefer:
-- Deriving state during render instead of syncing into local state
-- Event handlers for imperative work instead of "set flag → effect runs → reset flag"
-- Data-fetching libraries and server patterns instead of effect-based fetching
-- React remount semantics with `key` when the real requirement is "start fresh"
+Use declarative React patterns. When related client-state fields represent one interaction flow, prefer a reducer or one structured state object rather than many loosely coordinated state setters.
 
-**Only use mount-only effect for true external synchronization:**
-- DOM integration
-- Browser subscriptions
-- Third-party widget lifecycle
+## Error Handling and Security
 
-**Treat direct useEffect as a smell** that requires justification, not a default tool.
+Use typed application errors for predictable failure modes and shared JSON response helpers for routes. Do not leak server, provider, or runtime details to the UI. Broken invariants are internal failures, not normal empty states.
 
-### Error Handling
+Client-side UI never grants permission. Authorize sensitive actions on the server. Keep the Supabase service-role key and OpenAI key server-only. The browser may use only the Supabase publishable key and a short-lived authenticated access token.
 
-**Prefer typed application/domain errors over raw Error** for predictable failures.
+## Supabase, Upstash, and Data
 
-```ts
-// ✅ Good: Typed domain error
-export class ConversationNotFoundError extends Error {
-  constructor(public conversationId: string) {
-    super(`Conversation ${conversationId} not found`);
-    this.name = 'ConversationNotFoundError';
-  }
-}
+Use Supabase deliberately: Auth for anonymous identity, Postgres for authoritative durable data, Realtime for room synchronization and presence, and Edge Functions only where they are a cleaner boundary than a Next.js route handler. Redis may accelerate or coordinate, but Postgres remains the persisted source of truth.
 
-// ❌ Bad: Untyped throw
-throw new Error('Something went wrong');
-```
+Use Upstash Redis for cache-aside reads, short-lived vote limits, room tallies, transient presence information, and daily model budget tracking. Do not force Redis into persisted relational state. Use append-only Supabase migrations for SQL-specific behavior, RLS, grants, triggers, and functions. Keep TypeScript database types in step with migration changes.
 
-**Treat broken invariants as internal failures, not normal empty states.**
+## Persona Room Product Rules
 
-**Do not leak internal server/runtime error details** directly into user-facing UI.
+Use the exact product name **Persona Room** and persona name **Rina**. The public experience is a chat-first homepage at `/` and a phone-friendly live audience room at `/room/[id]`.
 
-### tRPC & Data Management
-
-**All backend communication must go through tRPC procedures.** No ad-hoc API routes for business logic.
-
-```ts
-// ✅ Good: tRPC procedure
-export const chatRouter = router({
-  sendMessage: protectedProcedure
-    .input(z.object({ message: z.string() }))
-    .mutation(({ ctx, input }) => {
-      // Business logic here
-    }),
-});
-
-// ❌ Bad: Direct API route for business logic
-// app/api/chat/send/route.ts
-```
-
-**Use optimistic updates for instant feedback** on list operations, toggles, profile edits. For critical operations (auth, payments), use `invalidate` with explicit loading states.
-
-### Validation
-
-**All inputs must be validated with Zod at the boundary.** Procedures validate input schemas; features validate business rules.
-
-```ts
-// ✅ Good: Zod validation at boundary
-export const sendMessageSchema = z.object({
-  message: z.string().min(1).max(2000),
-  sessionId: z.string().uuid(),
-});
-
-export async function sendMessage(input: z.infer<typeof sendMessageSchema>) {
-  // Validated input, safe to use
-}
-```
-
-### Database & Drizzle
-
-**Tables, columns, enums, and FK structure in TypeScript schema.**
-
-**Triggers, functions, RLS, and database-specific logic in manual SQL migrations.**
-
-**Migrations are append-only.** Never rewrite or reuse an old applied migration version.
-
-**Keep TypeScript schema and actual database structure in sync.**
-
-## Supabase & Realtime
-
-**Use Supabase Realtime for live subscriptions** (audience transcript, vote tallies).
-
-**Use Supabase RLS policies** to enforce row-level access control.
-
-**Use admin/service-role access only for true internal server-side operations** that must bypass RLS.
-
-**Prefer database-enforced correctness** for concurrency-sensitive invariants.
-
-## Redis & Upstash
-
-**Use Redis for ephemeral state:**
-- Active session presence
-- Live vote counts
-- Mood/expression broadcast
-- Cache-aside pattern for hot reads
-
-**Postgres remains the final authority** for persisted state.
-
-## UI & Styling
-
-**Desktop and mobile both matter;** do not ship a layout that only works on one.
-
-**For mobile, prioritize the primary action and primary information first.** Reduce vertical waste aggressively.
-
-**Prefer declarative React patterns** over synchronization code.
-
-**Use shadcn/ui components** for consistent, modern interactions.
-
-**Preserve design tokens:** keep `@layer base` rules in CSS. Utilities like `border-border` and `font-sans` depend on them.
-
-**Consistent design language:** use spacing, radius, shadows, and typography via tokens. Extract shared UI into `components/` for reuse.
-
-**Accessibility and responsiveness:** keep visible focus rings and ensure keyboard reachability; design mobile-first with thoughtful breakpoints.
-
-## Persona Room Specifics
-
-**Product names are exact:**
-- "Persona Room" (not "PersonaRoom", "Persona-Room", or "persona room")
-- "Rina" (not "rina", "RINA", or "the persona")
-
-**Mood variants are exactly:**
-- neutral
-- happy
-- surprised
-- sad/thoughtful
-
-**Rina's voice rules:**
-- Speaks in short, natural sentences (1–3 sentences per reply)
-- Playful, curious, warm. Never corporate. Never says "As an AI..."
-- Reacts visibly to emotion: softens when user is sad, matches energy when excited
-- Occasionally references memories of the user
-- Reacts in-character to audience votes within 1–2 sentences
-
-## Do Not
-
-- Do not add broad new abstractions without clear payoff
-- Do not hide important product or security tradeoffs
-- Do not invent database state, model behavior, or framework guarantees
-- Do not assume a random docs file will be auto-applied as instructions; repository expectations belong here
-- Do not create spaghetti by combining unrelated responsibilities in one file
-- Do not store file bytes in database columns; use S3 + metadata instead
-- Do not create nested routes without escape routes (no back button, no sidebar nav)
-- Do not force every concern into plain table reads; use Supabase capabilities intentionally
+Rina’s supported expressions are exactly `neutral`, `happy`, `surprised`, and `sad/thoughtful`. She speaks in one to three natural, playful, warm sentences; never uses corporate language or says “As an AI”; responds visibly to the user’s emotional tone; occasionally recalls durable user memories; and reacts in-character to audience votes.
 
 ## Validation Before Finishing
 
-**Run TypeScript and lint checks** after meaningful code changes when feasible.
+Run linting, TypeScript checks, and a production build after meaningful changes when feasible. Add focused tests for domain logic and server routes where they materially protect behavior. If verification cannot run, document the reason and the observable impact.
 
-**If you cannot run verification, say so explicitly.**
-
-**When changing behavior, explain the observable outcome,** not only the implementation.
-
-**Write vitest tests** for tRPC procedures and domain logic.
+Do not add broad abstractions without a clear payoff, invent provider guarantees, or assume documentation is applied automatically. Keep implementation and documentation aligned with the behavior users can observe.
