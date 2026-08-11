@@ -9,6 +9,7 @@ import type { SessionBootstrap } from "@/features/auth";
 import { type CompanionId, type PersonaMood } from "@/features/persona";
 import { appRoutes } from "@/infrastructure/config/routes";
 import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
+import { LoadingScreen } from "@/presentation/components/shared/loading-screen";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
@@ -32,6 +33,7 @@ interface ChatClientState {
   viewerCount: number;
   isSelectorOpen: boolean;
   isChangingCompanion: boolean;
+  hintedCompanionId?: CompanionId;
 }
 
 type ChatClientAction =
@@ -47,6 +49,18 @@ type ChatClientAction =
 const CHAT_AUTH_STORAGE_KEY = "persona-room-chat-auth";
 const COMPANION_SELECTION_KEY = "persona-room-companion-selected";
 
+function getHintedCompanion(): CompanionId | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const stored = window.sessionStorage.getItem(CHAT_AUTH_STORAGE_KEY);
+    if (!stored) return undefined;
+    const parsed = JSON.parse(stored) as { companionId?: CompanionId };
+    return parsed.companionId;
+  } catch {
+    return undefined;
+  }
+}
+
 function chatClientReducer(state: ChatClientState, action: ChatClientAction): ChatClientState {
   switch (action.type) {
     case "initialized":
@@ -56,6 +70,7 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
         mood: action.mood,
         isSelectorOpen: action.openSelector,
         setupError: undefined,
+        hintedCompanionId: action.identity.bootstrap.session.companionId,
       };
     case "set-mood":
       return { ...state, mood: action.mood };
@@ -76,6 +91,7 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
         mood: action.mood,
         draft: "",
         isSelectorOpen: false,
+        hintedCompanionId: action.bootstrap.session.companionId,
       };
     default:
       return state;
@@ -88,6 +104,7 @@ const initialChatState: ChatClientState = {
   viewerCount: 0,
   isSelectorOpen: false,
   isChangingCompanion: false,
+  hintedCompanionId: getHintedCompanion(),
 };
 
 function chatRequestBody() {
@@ -166,6 +183,7 @@ export function ChatExperience() {
           JSON.stringify({
             sessionId: bootstrap.session.id,
             accessToken: session.access_token,
+            companionId: bootstrap.session.companionId,
           }),
         );
         const selectionKey = `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`;
@@ -247,6 +265,14 @@ export function ChatExperience() {
       const bootstrap = bootstrapResult.data;
       setMessages(bootstrap.messages.map(asUiMessage));
       dispatch({ type: "companion-updated", bootstrap, mood: bootstrap.mood });
+      window.sessionStorage.setItem(
+        CHAT_AUTH_STORAGE_KEY,
+        JSON.stringify({
+          sessionId: bootstrap.session.id,
+          accessToken: state.identity.accessToken,
+          companionId: bootstrap.session.companionId,
+        }),
+      );
       window.localStorage.setItem(
         `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`,
         "confirmed",
@@ -275,7 +301,11 @@ export function ChatExperience() {
 
   const isLoading = !state.identity && !state.setupError;
   const isStreaming = status === "submitted" || status === "streaming";
-  const companionId = state.identity?.bootstrap.session.companionId ?? "rina";
+  const companionId = state.identity?.bootstrap.session.companionId ?? state.hintedCompanionId ?? "rina";
+
+  if (isLoading && !state.setupError) {
+    return <LoadingScreen />;
+  }
 
   return (
     <main className="persona-shell">
