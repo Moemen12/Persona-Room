@@ -13,11 +13,11 @@ import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
 
-import { ChatComposer } from "./chat/chat-composer";
-import { ChatHeader } from "./chat/chat-header";
-import { ChatTranscript } from "./chat/chat-transcript";
-import { CompanionPicker } from "./chat/companion-picker";
-import { PersonaSidebar } from "./chat/persona-sidebar";
+import { ChatComposer } from "./chat-composer";
+import { ChatHeader } from "./chat-header";
+import { ChatTranscript } from "./chat-transcript";
+import { CompanionPicker } from "./companion-picker";
+import { PersonaSidebar } from "./persona-sidebar";
 
 interface IdentityState {
   bootstrap: SessionBootstrap;

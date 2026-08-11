@@ -1,4 +1,4 @@
-import { ChatExperience } from "@/presentation/components/chat-experience";
+import { ChatExperience } from "@/presentation";
 
 export default function HomePage() {
   return <ChatExperience />;

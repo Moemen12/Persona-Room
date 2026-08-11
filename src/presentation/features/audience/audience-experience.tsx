@@ -1,8 +1,8 @@
 import { getRoomSnapshot } from "@/features/audience/audience.service";
-import { AudienceHeader } from "@/presentation/components/audience/audience-header";
-import { AudienceSpotlight } from "@/presentation/components/audience/audience-spotlight";
-import { AudienceTranscript } from "@/presentation/components/audience/audience-transcript";
-import { VotePanel } from "@/presentation/components/audience/vote-panel";
+import { AudienceHeader } from "./audience-header";
+import { AudienceSpotlight } from "./audience-spotlight";
+import { AudienceTranscript } from "./audience-transcript";
+import { VotePanel } from "./vote-panel";
 
 interface AudienceExperienceProps {
   roomId: string;
