@@ -9,6 +9,7 @@ import type { SessionBootstrap } from "@/features/auth";
 import { type CompanionId, type PersonaMood } from "@/features/persona";
 import { appRoutes } from "@/infrastructure/config/routes";
 import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
+import { getSafeChatAuth, getSafeCompanionHint, setSafeChatAuth } from "@/lib/storage";
 import { LoadingScreen } from "@/presentation/components/shared/loading-screen";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
@@ -48,18 +49,6 @@ type ChatClientAction =
 
 const CHAT_AUTH_STORAGE_KEY = "persona-room-chat-auth";
 const COMPANION_SELECTION_KEY = "persona-room-companion-selected";
-
-function getHintedCompanion(): CompanionId | undefined {
-  if (typeof window === "undefined") return undefined;
-  try {
-    const stored = window.sessionStorage.getItem(CHAT_AUTH_STORAGE_KEY);
-    if (!stored) return undefined;
-    const parsed = JSON.parse(stored) as { companionId?: CompanionId };
-    return parsed.companionId;
-  } catch {
-    return undefined;
-  }
-}
 
 function chatClientReducer(state: ChatClientState, action: ChatClientAction): ChatClientState {
   switch (action.type) {
@@ -104,18 +93,13 @@ const initialChatState: ChatClientState = {
   viewerCount: 0,
   isSelectorOpen: false,
   isChangingCompanion: false,
-  hintedCompanionId: getHintedCompanion(),
+  hintedCompanionId: getSafeCompanionHint(CHAT_AUTH_STORAGE_KEY),
 };
 
 function chatRequestBody() {
-  const stored = window.sessionStorage.getItem(CHAT_AUTH_STORAGE_KEY);
-  if (!stored) return {};
-  try {
-    return JSON.parse(stored) as { sessionId: string; accessToken: string };
-  } catch {
-    window.sessionStorage.removeItem(CHAT_AUTH_STORAGE_KEY);
-    return {};
-  }
+  const auth = getSafeChatAuth(CHAT_AUTH_STORAGE_KEY);
+  if (!auth) return {};
+  return { sessionId: auth.sessionId, accessToken: auth.accessToken };
 }
 
 function asUiMessage(message: SessionBootstrap["messages"][number]): UIMessage {
@@ -178,14 +162,11 @@ export function ChatExperience() {
         const bootstrap = jsonResult.data;
         if (controller.signal.aborted) return;
         const identity = { bootstrap, accessToken: session.access_token };
-        window.sessionStorage.setItem(
-          CHAT_AUTH_STORAGE_KEY,
-          JSON.stringify({
-            sessionId: bootstrap.session.id,
-            accessToken: session.access_token,
-            companionId: bootstrap.session.companionId,
-          }),
-        );
+        setSafeChatAuth(CHAT_AUTH_STORAGE_KEY, {
+          sessionId: bootstrap.session.id,
+          accessToken: session.access_token,
+          companionId: bootstrap.session.companionId,
+        });
         const selectionKey = `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`;
         const openSelector = window.localStorage.getItem(selectionKey) !== "confirmed";
         dispatch({ type: "initialized", identity, mood: bootstrap.mood, openSelector });
@@ -265,14 +246,11 @@ export function ChatExperience() {
       const bootstrap = bootstrapResult.data;
       setMessages(bootstrap.messages.map(asUiMessage));
       dispatch({ type: "companion-updated", bootstrap, mood: bootstrap.mood });
-      window.sessionStorage.setItem(
-        CHAT_AUTH_STORAGE_KEY,
-        JSON.stringify({
-          sessionId: bootstrap.session.id,
-          accessToken: state.identity.accessToken,
-          companionId: bootstrap.session.companionId,
-        }),
-      );
+      setSafeChatAuth(CHAT_AUTH_STORAGE_KEY, {
+        sessionId: bootstrap.session.id,
+        accessToken: state.identity.accessToken,
+        companionId: bootstrap.session.companionId,
+      });
       window.localStorage.setItem(
         `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`,
         "confirmed",
