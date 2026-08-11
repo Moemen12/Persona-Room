@@ -2,7 +2,7 @@ import { type UIMessage } from "ai";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import { useEffect, useRef } from "react";
 
-import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona/persona.types";
+import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona";
 import { MessageBubble } from "@/presentation/components/message-bubble";
 
 interface ChatTranscriptProps {

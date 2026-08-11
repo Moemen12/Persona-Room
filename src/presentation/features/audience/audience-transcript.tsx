@@ -3,8 +3,8 @@
 import { Radio } from "lucide-react";
 import { useState } from "react";
 
-import type { RoomBroadcast, RoomSnapshot } from "@/features/audience/audience.types";
-import type { PersonaMood } from "@/features/persona/persona.types";
+import type { RoomBroadcast, RoomSnapshot } from "@/features/audience";
+import type { PersonaMood } from "@/features/persona";
 import { MessageBubble } from "@/presentation/components/message-bubble";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
 

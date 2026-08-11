@@ -4,9 +4,9 @@ import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { type FormEvent, useReducer, useState } from "react";
 
-import type { RoomBroadcast } from "@/features/audience/audience.types";
-import type { SessionBootstrap } from "@/features/auth/auth.types";
-import { type CompanionId, type PersonaMood } from "@/features/persona/persona.types";
+import type { RoomBroadcast } from "@/features/audience";
+import type { SessionBootstrap } from "@/features/auth";
+import { type CompanionId, type PersonaMood } from "@/features/persona";
 import { appRoutes } from "@/infrastructure/config/routes";
 import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";

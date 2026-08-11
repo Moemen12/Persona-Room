@@ -1,6 +1,6 @@
 import { Sparkles, X } from "lucide-react";
 
-import { COMPANIONS, type CompanionId } from "@/features/persona/persona.types";
+import { COMPANIONS, type CompanionId } from "@/features/persona";
 import { cn } from "@/lib/utils";
 import { RinaAvatar } from "@/presentation/components/rina-avatar";
 

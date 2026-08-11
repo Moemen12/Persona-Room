@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent } from "react";
 
-import type { RoomBroadcast } from "@/features/audience/audience.types";
+import type { RoomBroadcast } from "@/features/audience";
 import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
 
 interface UseRoomRealtimeOptions {

@@ -19,6 +19,22 @@ export default defineConfig([
       "no-console": ["warn", { allow: ["warn", "error"] }],
       "prefer-const": "error",
       "no-var": "error",
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/features/*/*.ts",
+                "@/features/*/*.tsx",
+                "@/presentation/features/*/*.ts",
+                "@/presentation/features/*/*.tsx",
+              ],
+              message: "Please import only from feature public API index.ts boundaries (e.g. '@/features/persona'), not deep internal files.",
+            },
+          ],
+        },
+      ],
     },
   },
 ]);

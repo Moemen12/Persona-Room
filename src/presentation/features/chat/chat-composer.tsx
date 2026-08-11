@@ -1,7 +1,7 @@
 import { Send, Square } from "lucide-react";
 import { type FormEvent, useRef } from "react";
 
-import { COMPANIONS, type CompanionId } from "@/features/persona/persona.types";
+import { COMPANIONS, type CompanionId } from "@/features/persona";
 import { APP_CONFIG } from "@/lib/config/app";
 
 interface ChatComposerProps {

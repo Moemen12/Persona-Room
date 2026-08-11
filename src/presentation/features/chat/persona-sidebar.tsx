@@ -1,6 +1,6 @@
 import { Heart, Sparkles } from "lucide-react";
 
-import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona/persona.types";
+import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona";
 import { cn } from "@/lib/utils";
 import { RinaAvatar } from "@/presentation/components/rina-avatar";
 

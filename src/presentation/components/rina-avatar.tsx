@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona/persona.types";
+import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona";
 import { cn } from "@/lib/utils";
 
 const expressionFile: Record<PersonaMood, string> = {

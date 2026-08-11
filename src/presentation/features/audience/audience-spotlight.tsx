@@ -1,6 +1,6 @@
 import { Heart } from "lucide-react";
 
-import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona/persona.types";
+import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona";
 import { RinaAvatar } from "@/presentation/components/rina-avatar";
 
 interface AudienceSpotlightProps {

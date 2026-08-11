@@ -2,7 +2,7 @@
 
 import { Sparkles, Users, Volume2, VolumeX } from "lucide-react";
 
-import { COMPANIONS, type CompanionId } from "@/features/persona/persona.types";
+import { COMPANIONS, type CompanionId } from "@/features/persona";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 
 interface AudienceHeaderProps {

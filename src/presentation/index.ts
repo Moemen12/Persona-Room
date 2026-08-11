@@ -1,5 +1,5 @@
-export { ChatExperience } from "./features/chat/chat-experience";
-export { AudienceExperience } from "./features/audience/audience-experience";
+export { ChatExperience } from "./features/chat";
+export { AudienceExperience } from "./features/audience";
 export { MessageBubble } from "./components/message-bubble";
 export { RinaAvatar } from "./components/rina-avatar";
 export { LoadingScreen } from "./components/shared/loading-screen";

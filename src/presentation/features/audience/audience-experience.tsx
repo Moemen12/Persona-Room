@@ -1,4 +1,4 @@
-import { getRoomSnapshot } from "@/features/audience/audience.service";
+import { getRoomSnapshot } from "@/features/audience";
 import { AudienceHeader } from "./audience-header";
 import { AudienceSpotlight } from "./audience-spotlight";
 import { AudienceTranscript } from "./audience-transcript";
