@@ -1,11 +1,34 @@
 import { NextResponse } from "next/server";
+import { ZodError, type ZodIssue } from "zod";
 
 import { AppError } from "@/lib/errors";
 
 export function createErrorResponse(error: unknown) {
+  if (error instanceof ZodError) {
+    const details = error.issues.map((e: ZodIssue) => ({
+      field: e.path.join("."),
+      message: e.message,
+    }));
+    return NextResponse.json(
+      {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid input parameters provided.",
+          details,
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   if (error instanceof AppError) {
     return NextResponse.json(
-      { error: { code: error.code, message: error.message } },
+      {
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      },
       { status: error.status },
     );
   }
