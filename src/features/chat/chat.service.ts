@@ -15,47 +15,44 @@ import {
   moodFromEmotion,
 } from "@/features/persona/persona.service";
 import type { CompanionId, PersonaProfile } from "@/features/persona/persona.types";
-import { APP_CONFIG, type VoteOption } from "@/lib/config/app";
+import { APP_CONFIG } from "@/lib/config/app";
 import { DailyLimitError, NotFoundError } from "@/lib/errors";
-import { getRedisClient, withRedisFallback } from "@/infrastructure/redis/client";
-import { getSupabaseAdminClient } from "@/infrastructure/supabase/server";
+import { withRedisFallback } from "@/infrastructure/redis/client";
 
+import * as chatRepository from "./chat.repository";
 import {
   classifyEmotion,
   extractUserMemories,
   streamRinaResponse,
 } from "./gemini.service";
-import type { StoredConversation } from "./chat.types";
+import type { ChatServiceDependencies } from "./chat.types";
 
-function profileKey(userId: string) {
-  return `user:${userId}:profile`;
-}
+const defaultDependencies: ChatServiceDependencies = {
+  findMemoriesByUserId: chatRepository.findMemoriesByUserId,
+  saveMemories: chatRepository.saveMemories,
+  deleteMemoriesByIds: chatRepository.deleteMemoriesByIds,
+  findOldMemoriesForCleanup: chatRepository.findOldMemoriesForCleanup,
+  saveConversations: chatRepository.saveConversations,
+  findConversationHistory: chatRepository.findConversationHistory,
+  getProfileCache: chatRepository.getProfileCache,
+  setProfileCache: chatRepository.setProfileCache,
+  getLastVoteCache: chatRepository.getLastVoteCache,
+  incrementGeminiRequestCount: chatRepository.incrementGeminiRequestCount,
+};
 
-async function loadProfile(userId: string, sessionId: string): Promise<PersonaProfile> {
+async function loadProfile(
+  userId: string,
+  sessionId: string,
+  dependencies: ChatServiceDependencies,
+): Promise<PersonaProfile> {
   const fallback = async () => {
-    const client = getSupabaseAdminClient();
-    const { data, error } = await client
-      .from("memories")
-      .select("id, content, importance, created_at")
-      .eq("user_id", userId)
-      .order("importance", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(APP_CONFIG.memoryLimit);
-    if (error) throw error;
-
+    const memories = await dependencies.findMemoriesByUserId(userId);
     const profile: PersonaProfile = {
       ...createEmptyPersonaProfile(sessionId),
-      memories: (data ?? []).map((row) => ({
-        id: Number(row.id),
-        content: String(row.content),
-        importance: Number(row.importance),
-        createdAt: String(row.created_at),
-      })),
+      memories,
     };
     try {
-      await getRedisClient().set(profileKey(userId), profile, {
-        ex: APP_CONFIG.profileCacheSeconds,
-      });
+      await dependencies.setProfileCache(userId, profile);
     } catch (error) {
       console.warn("Unable to refresh profile cache", error);
     }
@@ -64,58 +61,16 @@ async function loadProfile(userId: string, sessionId: string): Promise<PersonaPr
 
   return withRedisFallback(
     async () => {
-      const cached = await getRedisClient().get<PersonaProfile>(profileKey(userId));
+      const cached = await dependencies.getProfileCache(userId);
       return cached ?? fallback();
     },
     fallback,
   );
 }
 
-async function saveProfile(userId: string, profile: PersonaProfile) {
+async function assertWithinDailyGeminiRequestCap(dependencies: ChatServiceDependencies) {
   try {
-    await getRedisClient().set(profileKey(userId), profile, {
-      ex: APP_CONFIG.profileCacheSeconds,
-    });
-  } catch (error) {
-    console.warn("Unable to save profile cache", error);
-  }
-}
-
-async function loadConversationHistory(
-  userId: string,
-  companionId: CompanionId,
-): Promise<StoredConversation[]> {
-  const client = getSupabaseAdminClient();
-  const { data, error } = await client
-    .from("conversations")
-    .select("role, content, created_at")
-    .eq("user_id", userId)
-    .eq("companion_id", companionId)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return (data ?? [])
-    .slice(-APP_CONFIG.conversationHistoryLimit)
-    .map((row) => ({
-      role: row.role as "user" | "assistant",
-      content: String(row.content),
-    }));
-}
-
-async function getLastVote(sessionId: string): Promise<VoteOption | null> {
-  try {
-    return await getRedisClient().get<VoteOption>(`room:${sessionId}:last-vote`);
-  } catch (error) {
-    console.warn("Unable to load audience context", error);
-    return null;
-  }
-}
-
-async function assertWithinDailyGeminiRequestCap() {
-  const key = `global:gemini_requests:${new Date().toISOString().slice(0, 10)}`;
-  try {
-    const redis = getRedisClient();
-    const totalRequests = await redis.incr(key);
-    if (totalRequests === 1) await redis.expire(key, 60 * 60 * 36);
+    const totalRequests = await dependencies.incrementGeminiRequestCount();
     if (totalRequests > APP_CONFIG.dailyGeminiRequestCap) throw new DailyLimitError();
   } catch (error) {
     if (error instanceof DailyLimitError) throw error;
@@ -141,42 +96,27 @@ async function persistConversation(
   assistantText: string,
   profile: PersonaProfile,
   companionId: CompanionId,
+  dependencies: ChatServiceDependencies,
 ) {
-  const client = getSupabaseAdminClient();
-  const { error: conversationError } = await client.from("conversations").insert([
-    { user_id: userId, companion_id: companionId, role: "user", content: userText },
-    { user_id: userId, companion_id: companionId, role: "assistant", content: assistantText },
-  ]);
-  if (conversationError) throw conversationError;
+  await dependencies.saveConversations(userId, companionId, userText, assistantText);
 
   try {
     const memories = memoriesFromLines(
       await extractUserMemories(userText, assistantText),
     );
     if (memories.length) {
-      const { error: memoryError } = await client
-        .from("memories")
-        .insert(memories.map((memory) => ({ user_id: userId, ...memory })));
-      if (memoryError) throw memoryError;
+      await dependencies.saveMemories(userId, memories);
 
       profile.memories = [...memories, ...profile.memories].slice(
         0,
         APP_CONFIG.memoryLimit,
       );
-      const { data: overflow } = await client
-        .from("memories")
-        .select("id")
-        .eq("user_id", userId)
-        .order("importance", { ascending: true })
-        .order("created_at", { ascending: true })
-        .range(APP_CONFIG.memoryLimit, APP_CONFIG.memoryLimit + 20);
-      if (overflow?.length) {
-        await client.from("memories").delete().in(
-          "id",
-          overflow.map((row) => row.id),
-        );
+      
+      const overflow = await dependencies.findOldMemoriesForCleanup(userId, APP_CONFIG.memoryLimit);
+      if (overflow.length) {
+        await dependencies.deleteMemoriesByIds(overflow.map((row) => Number(row.id)));
       }
-      await saveProfile(userId, profile);
+      await dependencies.setProfileCache(userId, profile);
     }
   } catch (error) {
     console.warn("Gemini memory extraction failed after conversation persistence", error);
@@ -193,12 +133,15 @@ async function persistConversation(
   });
 }
 
-export async function createCompanionChatStream(input: {
-  sessionId: string;
-  supabaseAuthId: string;
-  messages: UIMessage[];
-}) {
-  await assertWithinDailyGeminiRequestCap();
+export async function createCompanionChatStream(
+  input: {
+    sessionId: string;
+    supabaseAuthId: string;
+    messages: UIMessage[];
+  },
+  dependencies: ChatServiceDependencies = defaultDependencies,
+) {
+  await assertWithinDailyGeminiRequestCap(dependencies);
   const { session, user } = await getInternalUserForSession(input.sessionId);
   if (user.supabaseAuthId !== input.supabaseAuthId) throw new NotFoundError("Room");
 
@@ -212,15 +155,15 @@ export async function createCompanionChatStream(input: {
   }
 
   const [profile, history, audienceVote, emotion] = await Promise.all([
-    loadProfile(user.id, session.id),
-    loadConversationHistory(user.id, session.companionId),
-    getLastVote(session.id),
+    loadProfile(user.id, session.id, dependencies),
+    dependencies.findConversationHistory(user.id, session.companionId, APP_CONFIG.conversationHistoryLimit),
+    dependencies.getLastVoteCache(session.id),
     classifyEmotion(userText),
   ]);
 
   profile.mood = moodFromEmotion(emotion);
   profile.lastSessionId = session.id;
-  await saveProfile(user.id, profile);
+  await dependencies.setProfileCache(user.id, profile);
 
   const geminiStream = await streamRinaResponse({
     systemInstruction: buildCompanionSystemPrompt(profile, session.companionId, audienceVote),
@@ -250,6 +193,7 @@ export async function createCompanionChatStream(input: {
           assistantText,
           profile,
           session.companionId,
+          dependencies,
         );
       } catch (error) {
         console.error("Unable to persist completed Gemini conversation", error);

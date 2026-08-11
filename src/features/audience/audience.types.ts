@@ -1,5 +1,13 @@
-import type { CompanionId } from "@/features/persona/persona.types";
-import type { VoteOption } from "@/lib/config/app";
+import { type CompanionId } from "@/features/persona/persona.types";
+import { type VoteOption } from "@/lib/config/app";
+import type * as audienceRepository from "./audience.repository";
+
+export type AudienceServiceDependencies = {
+  findRoomMessages: typeof audienceRepository.findRoomMessages;
+  findVoteTally: typeof audienceRepository.findVoteTally;
+  insertVote: typeof audienceRepository.insertVote;
+  insertAssistantReaction: typeof audienceRepository.insertAssistantReaction;
+};
 
 export interface RoomMessage {
   id: string;

@@ -1,4 +1,15 @@
 import type { CompanionId, PersonaMood } from "@/features/persona/persona.types";
+import type * as authRepository from "./auth.repository";
+
+export type AuthServiceDependencies = {
+  findUserBySupabaseId: typeof authRepository.findUserBySupabaseId;
+  createUser: typeof authRepository.createUser;
+  findLatestSessionByUserId: typeof authRepository.findLatestSessionByUserId;
+  createSession: typeof authRepository.createSession;
+  updateSessionCompanion: typeof authRepository.updateSessionCompanion;
+  findSessionWithUserById: typeof authRepository.findSessionWithUserById;
+  findConversationsByUserIdAndCompanionId: typeof authRepository.findConversationsByUserIdAndCompanionId;
+};
 
 export interface PersonaUser {
   id: string;
