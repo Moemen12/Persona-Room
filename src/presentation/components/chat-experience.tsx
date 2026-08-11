@@ -13,8 +13,9 @@ import {
   Square,
   Volume2,
   VolumeX,
+  X,
 } from "lucide-react";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import type { RoomBroadcast } from "@/features/audience/audience.types";
 import type { SessionBootstrap } from "@/features/auth/auth.types";
@@ -96,6 +97,8 @@ export function ChatExperience() {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [isChangingCompanion, setIsChangingCompanion] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+
   const { play, setSoundEnabled, soundEnabled } = useInterfaceSound();
 
   const [chat] = useState(
@@ -112,6 +115,12 @@ export function ChatExperience() {
     chat,
     experimental_throttle: 50,
   });
+
+  useEffect(() => {
+    if (messageListRef.current) {
+      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    }
+  }, [messages, status]);
 
   useMountEffect(() => {
     const controller = new AbortController();
@@ -186,7 +195,17 @@ export function ChatExperience() {
   });
 
   const chooseCompanion = async (companionId: CompanionId) => {
-    if (!identity || isChangingCompanion) return;
+    if (!identity) return;
+    const currentCompanionId = identity.bootstrap.session.companionId;
+    if (companionId === currentCompanionId) {
+      window.localStorage.setItem(
+        `${COMPANION_SELECTION_KEY}:${identity.bootstrap.session.id}`,
+        "confirmed",
+      );
+      setIsSelectorOpen(false);
+      return;
+    }
+    if (isChangingCompanion) return;
     setIsChangingCompanion(true);
     try {
       const response = await fetch(appRoutes.api.session, {
@@ -264,9 +283,24 @@ export function ChatExperience() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="companion-picker-title"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsSelectorOpen(false);
+            }
+          }}
         >
           <div className="companion-picker__panel">
-            <span className="eyebrow"><Sparkles aria-hidden="true" size={13} /> YOUR PRIVATE ROOM</span>
+            <div className="companion-picker__top">
+              <span className="eyebrow"><Sparkles aria-hidden="true" size={13} /> YOUR PRIVATE ROOM</span>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setIsSelectorOpen(false)}
+                aria-label="Close companion picker"
+              >
+                <X aria-hidden="true" size={18} />
+              </button>
+            </div>
             <h2 id="companion-picker-title">Who do you want to talk with?</h2>
             <p>Choose a companion for this room. You can change your choice later from the profile card.</p>
             <div className="companion-picker__choices">
@@ -357,7 +391,7 @@ export function ChatExperience() {
               <span className="chat-card__hint">say it like you mean it</span>
             </div>
 
-            <div className="message-list" aria-live="polite" aria-label={`Conversation with ${companion.name}`}>
+            <div ref={messageListRef} className="message-list" aria-live="polite" aria-label={`Conversation with ${companion.name}`}>
               {isLoading ? (
                 <div className="empty-message">
                   <LoaderCircle className="spin" aria-hidden="true" /> Opening the room…

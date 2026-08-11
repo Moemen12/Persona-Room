@@ -190,6 +190,8 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 
 .companion-picker { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(6, 4, 16, 0.74); backdrop-filter: blur(12px); animation: rise 280ms ease-out; }
 .companion-picker__panel { width: min(100%, 620px); border: 1px solid rgba(213, 194, 255, 0.28); border-radius: 28px; padding: clamp(24px, 5vw, 38px); background: linear-gradient(145deg, rgba(42, 28, 90, 0.96), rgba(12, 8, 31, 0.98)); box-shadow: 0 34px 100px rgba(0, 0, 0, 0.55), 0 0 70px rgba(133, 76, 238, 0.16); }
+.companion-picker__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.companion-picker__top .eyebrow { margin-bottom: 0; }
 .companion-picker__panel h2 { max-width: 420px; margin: 0; color: #fff; font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -0.055em; line-height: 0.96; }
 .companion-picker__panel > p { max-width: 460px; margin: 13px 0 24px; color: var(--muted); font-size: 0.87rem; line-height: 1.55; }
 .companion-picker__choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
