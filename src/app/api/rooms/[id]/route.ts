@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { getRoomSnapshot } from "@/features/audience/audience.service";
+import { MethodNotAllowedError } from "@/lib/errors";
 import { createErrorResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -18,3 +19,14 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
     return createErrorResponse(error);
   }
 }
+
+async function handleNotAllowed(request: Request) {
+  return createErrorResponse(new MethodNotAllowedError(request.method, ["GET"]));
+}
+
+export {
+  handleNotAllowed as POST,
+  handleNotAllowed as PUT,
+  handleNotAllowed as DELETE,
+  handleNotAllowed as PATCH,
+};

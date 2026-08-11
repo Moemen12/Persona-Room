@@ -4,6 +4,7 @@ import { broadcastRoomEvent } from "@/features/audience/audience.service";
 import { getSessionBootstrap, updateSessionCompanion } from "@/features/auth/auth.service";
 import { COMPANION_IDS } from "@/features/persona/persona.types";
 import { getSupabaseAuthUser } from "@/infrastructure/supabase/server";
+import { MethodNotAllowedError } from "@/lib/errors";
 import { createErrorResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -41,3 +42,13 @@ export async function PUT(request: Request) {
     return createErrorResponse(error);
   }
 }
+
+async function handleNotAllowed(request: Request) {
+  return createErrorResponse(new MethodNotAllowedError(request.method, ["POST", "PUT"]));
+}
+
+export {
+  handleNotAllowed as GET,
+  handleNotAllowed as DELETE,
+  handleNotAllowed as PATCH,
+};

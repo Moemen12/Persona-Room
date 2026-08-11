@@ -44,3 +44,10 @@ export class ConfigurationError extends AppError {
     this.name = "ConfigurationError";
   }
 }
+
+export class MethodNotAllowedError extends AppError {
+  constructor(method: string, allowed: string[]) {
+    super(`Method ${method} is not allowed. Allowed methods: ${allowed.join(", ")}`, "METHOD_NOT_ALLOWED", 405);
+    this.name = "MethodNotAllowedError";
+  }
+}
