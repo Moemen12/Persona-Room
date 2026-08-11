@@ -1,0 +1,47 @@
+.rina-avatar-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.rina-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 300ms cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+  animation: rina-bob 3s ease-in-out infinite;
+}
+
+.rina-avatar-transitioning {
+  opacity: 0.5 !important;
+  transform: scale(0.95);
+}
+
+.rina-avatar-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rina-mood-label {
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+@keyframes rina-bob {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rina-avatar {
+    animation: none;
+  }
+}
