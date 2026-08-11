@@ -31,10 +31,10 @@ export class RateLimitError extends AppError {
   }
 }
 
-export class BudgetExceededError extends AppError {
+export class DailyLimitError extends AppError {
   constructor() {
-    super("Demo on pause — back soon.", "BUDGET_EXCEEDED", 429);
-    this.name = "BudgetExceededError";
+    super("Rina has reached today’s free demo limit — she’ll be back tomorrow.", "DAILY_LIMIT_REACHED", 429);
+    this.name = "DailyLimitError";
   }
 }
 

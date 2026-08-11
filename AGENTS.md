@@ -32,13 +32,13 @@ Use declarative React patterns. When related client-state fields represent one i
 
 Use typed application errors for predictable failure modes and shared JSON response helpers for routes. Do not leak server, provider, or runtime details to the UI. Broken invariants are internal failures, not normal empty states.
 
-Client-side UI never grants permission. Authorize sensitive actions on the server. Keep the Supabase service-role key and OpenAI key server-only. The browser may use only the Supabase publishable key and a short-lived authenticated access token.
+Client-side UI never grants permission. Authorize sensitive actions on the server. Keep the Supabase service-role key and Gemini API key server-only. The browser may use only the Supabase publishable key and a short-lived authenticated access token.
 
 ## Supabase, Upstash, and Data
 
 Use Supabase deliberately: Auth for anonymous identity, Postgres for authoritative durable data, Realtime for room synchronization and presence, and Edge Functions only where they are a cleaner boundary than a Next.js route handler. Redis may accelerate or coordinate, but Postgres remains the persisted source of truth.
 
-Use Upstash Redis for cache-aside reads, short-lived vote limits, room tallies, transient presence information, and daily model budget tracking. Do not force Redis into persisted relational state. Use append-only Supabase migrations for SQL-specific behavior, RLS, grants, triggers, and functions. Keep TypeScript database types in step with migration changes.
+Use Upstash Redis for cache-aside reads, short-lived vote limits, room tallies, transient presence information, and daily Gemini request-cap tracking. Do not force Redis into persisted relational state. Use append-only Supabase migrations for SQL-specific behavior, RLS, grants, triggers, and functions. Keep TypeScript database types in step with migration changes.
 
 ## Persona Room Product Rules
 

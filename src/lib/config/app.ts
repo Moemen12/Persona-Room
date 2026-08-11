@@ -8,8 +8,7 @@ export const APP_CONFIG = {
   profileCacheSeconds: 60 * 60,
   voteRateLimitSeconds: 5,
   voteCacheSeconds: 5 * 60,
-  dailyBudgetUsd: 4,
-  estimatedReplyCostUsd: 0.002,
+  dailyGeminiRequestCap: 120,
   publicTranscriptLimit: 50,
 } as const;
 
