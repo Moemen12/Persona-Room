@@ -4,7 +4,7 @@ import { Radio } from "lucide-react";
 import { useState } from "react";
 
 import type { RoomBroadcast, RoomSnapshot } from "@/features/audience/audience.types";
-import { type CompanionId, type PersonaMood } from "@/features/persona/persona.types";
+import type { PersonaMood } from "@/features/persona/persona.types";
 import { MessageBubble } from "@/presentation/components/message-bubble";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
 
@@ -15,7 +15,7 @@ interface AudienceTranscriptProps {
 
 export function AudienceTranscript({ initialSnapshot, roomId }: AudienceTranscriptProps) {
   const [snapshot, setSnapshot] = useState<RoomSnapshot>(initialSnapshot);
-  const [mood, setMood] = useState<PersonaMood>("neutral");
+  const [, setMood] = useState<PersonaMood>("neutral");
 
   useRoomRealtime({
     roomId,
@@ -50,7 +50,7 @@ export function AudienceTranscript({ initialSnapshot, roomId }: AudienceTranscri
     },
   });
 
-  const companionId = snapshot.companionId;
+
 
   return (
     <section className="audience-transcript">
