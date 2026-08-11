@@ -2,7 +2,7 @@
 
 import { useOptimistic, useState } from "react";
 
-import { submitVoteAction } from "@/features/audience/audience.actions";
+import { submitVoteAction } from "@/actions/audience.actions";
 import type { VoteTally } from "@/features/audience/audience.types";
 import { COMPANIONS, type CompanionId } from "@/features/persona/persona.types";
 import { VOTE_OPTIONS, type VoteOption } from "@/lib/config/app";
