@@ -82,7 +82,8 @@ export async function getSessionBootstrap(supabaseAuthId: string): Promise<Sessi
     .select("id, role, content, created_at")
     .eq("user_id", user.id)
     .eq("companion_id", session.companionId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
 
   if (error) throw error;
   const slicedConversations = (conversations ?? []).slice(-APP_CONFIG.conversationHistoryLimit);

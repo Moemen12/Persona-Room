@@ -223,6 +223,7 @@ export function ChatExperience() {
         headers: { authorization: `Bearer ${identity.accessToken}` },
       });
       if (!bootstrapResponse.ok) throw new Error("Companion refresh failed");
+      stop();
       const bootstrap = (await bootstrapResponse.json()) as SessionBootstrap;
       setIdentity({ bootstrap, accessToken: identity.accessToken });
       setMessages(bootstrap.messages.map(asUiMessage));
