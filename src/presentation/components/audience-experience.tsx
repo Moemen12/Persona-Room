@@ -1,7 +1,7 @@
 "use client";
 
 import { Heart, LoaderCircle, Radio, Sparkles, Users, Volume2, VolumeX } from "lucide-react";
-import { useReducer, useState } from "react";
+import { useOptimistic, useReducer } from "react";
 
 import type { RoomBroadcast, RoomSnapshot, VoteTally } from "@/features/audience/audience.types";
 import { COMPANIONS, type PersonaMood } from "@/features/persona/persona.types";
@@ -91,12 +91,19 @@ function audienceLabel(viewerCount: number) {
 
 export function AudienceExperience({ roomId }: { roomId: string }) {
   const [state, dispatch] = useReducer(audienceReducer, initialState);
-  const [isHydrated, setIsHydrated] = useState(false);
+
   const { play, setSoundEnabled, soundEnabled } = useInterfaceSound();
 
-  useMountEffect(() => {
-    setIsHydrated(true);
-  });
+  // React 19 useOptimistic for instant vote tally feedback
+  const [optimisticTally, setOptimisticTally] = useOptimistic(
+    state.snapshot?.tally ?? { sing: 0, joke: 0, art: 0, surprise: 0 },
+    (currentTally, votedOption: VoteOption) => ({
+      ...currentTally,
+      [votedOption]: (currentTally[votedOption] ?? 0) + 1,
+    })
+  );
+
+
 
   useMountEffect(() => {
     const controller = new AbortController();
@@ -132,6 +139,10 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
     if (!state.fingerprint || state.submitting) return;
     play("vote");
     dispatch({ type: "submitting", option });
+    
+    // Apply optimistic update immediately
+    setOptimisticTally(option);
+
     try {
       const response = await fetch(appRoutes.api.vote(roomId), {
         method: "POST",
@@ -156,106 +167,137 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
     }
   };
 
-  const tally = state.snapshot?.tally;
-  const highestVote = Math.max(1, ...Object.values(tally ?? {}).map(Number));
-  const companion = COMPANIONS[state.snapshot?.companionId ?? "rina"];
+  const companionId = state.snapshot?.companionId ?? "rina";
+  const companion = COMPANIONS[companionId];
+  const highestVote = Math.max(1, ...Object.values(optimisticTally).map(Number));
 
   return (
     <main className="audience-shell">
       <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
       <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
-      <section className="audience-room">
+
+      <div className="audience-room">
         <header className="audience-header">
           <div>
-            <p className="eyebrow"><Radio aria-hidden="true" size={13} /> LIVE AUDIENCE ROOM</p>
-            <h1>{companion.name} is listening.</h1>
+            <span className="eyebrow"><Sparkles aria-hidden="true" size={13} /> {companion.name.toUpperCase()}’S STAGE</span>
+            <h1>Live Audience</h1>
           </div>
           <div className="audience-header__actions">
+            <div className="audience-viewers" role="status">
+              <Users aria-hidden="true" size={14} />
+              <span>{audienceLabel(state.viewerCount)}</span>
+            </div>
             <button
               className="icon-button"
               type="button"
-              onClick={() => setSoundEnabled((current) => !current)}
-              aria-label={soundEnabled ? "Turn interface sounds off" : "Turn interface sounds on"}
-              aria-pressed={soundEnabled}
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              aria-label={soundEnabled ? "Mute interface sound" : "Enable interface sound"}
             >
-              {soundEnabled ? <Volume2 aria-hidden="true" size={17} /> : <VolumeX aria-hidden="true" size={17} />}
+              {soundEnabled ? <Volume2 aria-hidden="true" size={16} /> : <VolumeX aria-hidden="true" size={16} />}
             </button>
-            <span className="audience-viewers"><Users aria-hidden="true" size={15} /> {audienceLabel(state.viewerCount)}</span>
           </div>
         </header>
 
-        <section className="audience-spotlight" aria-label={`${companion.name} live status`}>
-          <div className="audience-spotlight__avatar"><RinaAvatar companionId={companion.id} mood={state.mood} size="room" /></div>
-          <div className="audience-spotlight__copy">
-            <span className="live-chip"><span className="presence-pulse" aria-hidden="true" /> OPEN TO THE ROOM</span>
-            <p>{companion.id === "rina" ? "She can feel the room leaning in." : "He can feel the room leaning in."}</p>
-            <span>Vote for the next little spark.</span>
+        <section className="audience-spotlight">
+          <div className="audience-spotlight__avatar">
+            <RinaAvatar companionId={companionId} mood={state.mood} size="room" />
           </div>
-          <div className="audience-spotlight__mood"><Heart aria-hidden="true" size={15} /> feeling <strong>{state.mood}</strong></div>
+          <div className="audience-spotlight__copy">
+            <div className="live-chip">
+              <span className="presence-pulse" aria-hidden="true" />
+              <span>INTERACTIVE</span>
+            </div>
+            <p>Vote on what {companion.name} does next and watch the room react in real time.</p>
+            <span>Connected to {companion.name}&apos;s private feed</span>
+          </div>
+          <div className="audience-spotlight__mood" role="status">
+            <Heart aria-hidden="true" size={14} />
+            <span>Mood: <strong>{state.mood}</strong></span>
+          </div>
+        </section>
+
+        <section className="vote-panel" aria-labelledby="vote-title">
+          <div className="vote-panel__header">
+            <div>
+              <span className="eyebrow">AUDIENCE VOTE</span>
+              <h2 id="vote-title">Direct {companion.name}</h2>
+            </div>
+            <span>Live poll</span>
+          </div>
+          <p className="vote-panel__description">
+            Cast your vote to shape {companion.name}&apos;s next response in the conversation.
+          </p>
+
+          <div className="vote-options">
+            {VOTE_OPTIONS.map((candidate) => {
+              const count = optimisticTally[candidate.value] ?? 0;
+              const percentage = Math.round((count / highestVote) * 100);
+              const isSelected = state.submitting === candidate.value;
+              return (
+                <button
+                  key={candidate.value}
+                  className={cn("vote-option", isSelected && "vote-option--selected")}
+                  type="button"
+                  onClick={() => void vote(candidate.value)}
+                  disabled={Boolean(state.submitting)}
+                >
+                  <span className="vote-option__main">
+                    <span className="vote-option__emoji" aria-hidden="true">{candidate.emoji}</span>
+                    <span>{candidate.label}</span>
+                  </span>
+                  <span className="vote-option__count">{count}</span>
+                  <span className="vote-option__track" aria-hidden="true">
+                    <span style={{ width: `${Math.max(6, percentage)}%` }} />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <footer className="vote-panel__foot">
+            <span className="presence-pulse" aria-hidden="true" />
+            <span>Votes sync instantly via Supabase & Upstash</span>
+          </footer>
         </section>
 
         <div className="audience-layout">
-          <section className="audience-transcript" aria-live="polite">
+          <section className="audience-transcript">
             <div className="audience-transcript__header">
-              <span><Sparkles aria-hidden="true" size={13} /> LIVE TRANSCRIPT</span>
-              <span>read only</span>
+              <span>
+                <Radio aria-hidden="true" size={15} />
+                <span>Public Room Feed</span>
+              </span>
+              <span className="chat-card__hint">Synced with room</span>
             </div>
-            <div className="audience-transcript__body">
+
+            <div className="audience-transcript__body" tabIndex={0} aria-label="Room transcript">
               {state.loading ? (
-                <div className="empty-message"><LoaderCircle className="spin" aria-hidden="true" /> Joining the room…</div>
-              ) : null}
-              {state.error ? <div className="error-message">{state.error}</div> : null}
-              {!state.loading && !state.error && state.snapshot?.messages.length === 0 ? (
-                <div className="waiting-state">Waiting for someone to talk to {companion.name}…</div>
-              ) : null}
-              {state.snapshot?.messages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  role={message.role}
-                  text={message.content}
-                  createdAt={message.createdAt}
-                  assistantName={companion.name}
-                />
-              ))}
+                <div className="waiting-state" role="status">
+                  <LoaderCircle aria-hidden="true" size={20} className="spin" />
+                  <span>Loading room feed...</span>
+                </div>
+              ) : state.error ? (
+                <div className="error-message">
+                  <p>{state.error}</p>
+                </div>
+              ) : state.snapshot?.messages.length === 0 ? (
+                <div className="waiting-state">
+                  <span>No conversation in this room yet. Send a message to start!</span>
+                </div>
+              ) : (
+                state.snapshot?.messages.map((message) => (
+                  <MessageBubble
+                    key={message.id}
+                    role={message.role === "user" ? "user" : "assistant"}
+                    text={message.content}
+                    assistantName={companion.name}
+                  />
+                ))
+              )}
             </div>
           </section>
-
-          <aside className="vote-panel" aria-labelledby="vote-heading">
-            <div className="vote-panel__header">
-              <div>
-                <p className="eyebrow">YOUR TURN</p>
-                <h2 id="vote-heading">Pick {companion.id === "rina" ? "her" : "his"} next move.</h2>
-              </div>
-              <span>one tap</span>
-            </div>
-            <p className="vote-panel__description">The room decides what {companion.name} does next. Your vote lands live.</p>
-            <div className="vote-options">
-              {VOTE_OPTIONS.map((option) => {
-                const count = tally?.[option.value] ?? 0;
-                const percent = Math.round((count / highestVote) * 100);
-                const selected = state.submitting === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    className={cn("vote-option", selected && "vote-option--selected")}
-                    type="button"
-                    onClick={() => void vote(option.value)}
-                    disabled={!isHydrated || !state.snapshot || Boolean(state.submitting)}
-                  >
-                    <span className="vote-option__main">
-                      <span className="vote-option__emoji">{option.emoji}</span>
-                      <span>{option.label}</span>
-                    </span>
-                    <span className="vote-option__count">{count}</span>
-                    <span className="vote-option__track"><span style={{ width: `${percent}%` }} /></span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="vote-panel__foot"><span className="presence-pulse" aria-hidden="true" /> reactions update for everyone</div>
-          </aside>
         </div>
-      </section>
+      </div>
     </main>
   );
 }

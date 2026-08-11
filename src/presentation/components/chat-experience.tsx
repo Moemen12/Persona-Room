@@ -15,7 +15,7 @@ import {
   VolumeX,
   X,
 } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 
 import type { RoomBroadcast } from "@/features/audience/audience.types";
 import type { SessionBootstrap } from "@/features/auth/auth.types";
@@ -39,9 +39,77 @@ interface IdentityState {
   accessToken: string;
 }
 
+interface ChatClientState {
+  identity?: IdentityState;
+  mood: PersonaMood;
+  draft: string;
+  setupError?: string;
+  copied: boolean;
+  viewerCount: number;
+  isSelectorOpen: boolean;
+  isChangingCompanion: boolean;
+}
+
+type ChatClientAction =
+  | { type: "initialized"; identity: IdentityState; mood: PersonaMood; openSelector: boolean }
+  | { type: "set-mood"; mood: PersonaMood }
+  | { type: "set-draft"; draft: string }
+  | { type: "set-setup-error"; error: string }
+  | { type: "set-copied"; copied: boolean }
+  | { type: "set-viewer-count"; count: number }
+  | { type: "set-selector-open"; open: boolean }
+  | { type: "set-changing-companion"; changing: boolean }
+  | { type: "companion-updated"; bootstrap: SessionBootstrap; mood: PersonaMood };
+
 const CHAT_AUTH_STORAGE_KEY = "persona-room-chat-auth";
 const COMPANION_SELECTION_KEY = "persona-room-companion-selected";
 const COMPOSER_MAX_HEIGHT = 142;
+
+function chatClientReducer(state: ChatClientState, action: ChatClientAction): ChatClientState {
+  switch (action.type) {
+    case "initialized":
+      return {
+        ...state,
+        identity: action.identity,
+        mood: action.mood,
+        isSelectorOpen: action.openSelector,
+        setupError: undefined,
+      };
+    case "set-mood":
+      return { ...state, mood: action.mood };
+    case "set-draft":
+      return { ...state, draft: action.draft };
+    case "set-setup-error":
+      return { ...state, setupError: action.error };
+    case "set-copied":
+      return { ...state, copied: action.copied };
+    case "set-viewer-count":
+      return { ...state, viewerCount: action.count };
+    case "set-selector-open":
+      return { ...state, isSelectorOpen: action.open };
+    case "set-changing-companion":
+      return { ...state, isChangingCompanion: action.changing };
+    case "companion-updated":
+      return {
+        ...state,
+        identity: state.identity ? { ...state.identity, bootstrap: action.bootstrap } : undefined,
+        mood: action.mood,
+        draft: "",
+        isSelectorOpen: false,
+      };
+    default:
+      return state;
+  }
+}
+
+const initialChatState: ChatClientState = {
+  mood: "neutral",
+  draft: "",
+  copied: false,
+  viewerCount: 0,
+  isSelectorOpen: false,
+  isChangingCompanion: false,
+};
 
 function chatRequestBody() {
   const stored = window.sessionStorage.getItem(CHAT_AUTH_STORAGE_KEY);
@@ -72,9 +140,7 @@ function messageText(message: UIMessage) {
     .join("");
 }
 
-function isAssistantMessage(message: UIMessage) {
-  return message.role === "assistant";
-}
+
 
 function listenerLabel(viewerCount: number) {
   if (viewerCount === 0) return "private for now";
@@ -88,14 +154,7 @@ function resizeComposer(textarea: HTMLTextAreaElement) {
 }
 
 export function ChatExperience() {
-  const [identity, setIdentity] = useState<IdentityState>();
-  const [mood, setMood] = useState<PersonaMood>("neutral");
-  const [draft, setDraft] = useState("");
-  const [setupError, setSetupError] = useState<string>();
-  const [copied, setCopied] = useState(false);
-  const [viewerCount, setViewerCount] = useState(0);
-  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
-  const [isChangingCompanion, setIsChangingCompanion] = useState(false);
+  const [state, dispatch] = useReducer(chatClientReducer, initialChatState);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
 
@@ -143,7 +202,7 @@ export function ChatExperience() {
         if (!response.ok) throw new Error("Session setup failed");
         const bootstrap = (await response.json()) as SessionBootstrap;
         if (controller.signal.aborted) return;
-        const state = { bootstrap, accessToken: session.access_token };
+        const identity = { bootstrap, accessToken: session.access_token };
         window.sessionStorage.setItem(
           CHAT_AUTH_STORAGE_KEY,
           JSON.stringify({
@@ -151,14 +210,16 @@ export function ChatExperience() {
             accessToken: session.access_token,
           }),
         );
-        setIdentity(state);
-        setMood(bootstrap.mood);
-        setMessages(bootstrap.messages.map(asUiMessage));
         const selectionKey = `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`;
-        setIsSelectorOpen(window.localStorage.getItem(selectionKey) !== "confirmed");
+        const openSelector = window.localStorage.getItem(selectionKey) !== "confirmed";
+        dispatch({ type: "initialized", identity, mood: bootstrap.mood, openSelector });
+        setMessages(bootstrap.messages.map(asUiMessage));
       } catch (initializationError) {
         if (!controller.signal.aborted) {
-          setSetupError("The room needs its Supabase settings before it can remember you.");
+          dispatch({
+            type: "set-setup-error",
+            error: "The room needs its Supabase settings before it can remember you.",
+          });
           console.error(initializationError);
         }
       }
@@ -168,12 +229,12 @@ export function ChatExperience() {
   });
 
   useRoomRealtime({
-    roomId: identity?.bootstrap.session.id,
-    onViewerCount: setViewerCount,
+    roomId: state.identity?.bootstrap.session.id,
+    onViewerCount: (count) => dispatch({ type: "set-viewer-count", count }),
     onEvent: (event: RoomBroadcast) => {
       if (event.type === "companion-changed") return;
       if (event.type === "vote-tally" || event.type === "persona-reaction") {
-        setMood("surprised");
+        dispatch({ type: "set-mood", mood: "surprised" });
       }
       const roomMessage = event.message;
       if (roomMessage && roomMessage.role === "assistant") {
@@ -195,90 +256,89 @@ export function ChatExperience() {
   });
 
   const chooseCompanion = async (companionId: CompanionId) => {
-    if (!identity) return;
-    const currentCompanionId = identity.bootstrap.session.companionId;
+    if (!state.identity) return;
+    const currentCompanionId = state.identity.bootstrap.session.companionId;
     if (companionId === currentCompanionId) {
       window.localStorage.setItem(
-        `${COMPANION_SELECTION_KEY}:${identity.bootstrap.session.id}`,
+        `${COMPANION_SELECTION_KEY}:${state.identity.bootstrap.session.id}`,
         "confirmed",
       );
-      setIsSelectorOpen(false);
+      dispatch({ type: "set-selector-open", open: false });
       return;
     }
-    if (isChangingCompanion) return;
-    setIsChangingCompanion(true);
+    if (state.isChangingCompanion) return;
+    dispatch({ type: "set-changing-companion", changing: true });
     try {
       const response = await fetch(appRoutes.api.session, {
         method: "PUT",
         headers: {
-          authorization: `Bearer ${identity.accessToken}`,
+          authorization: `Bearer ${state.identity.accessToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ sessionId: identity.bootstrap.session.id, companionId }),
+        body: JSON.stringify({ sessionId: state.identity.bootstrap.session.id, companionId }),
       });
       if (!response.ok) throw new Error("Companion update failed");
 
       const bootstrapResponse = await fetch(appRoutes.api.session, {
         method: "POST",
-        headers: { authorization: `Bearer ${identity.accessToken}` },
+        headers: { authorization: `Bearer ${state.identity.accessToken}` },
       });
       if (!bootstrapResponse.ok) throw new Error("Companion refresh failed");
       stop();
       const bootstrap = (await bootstrapResponse.json()) as SessionBootstrap;
-      setIdentity({ bootstrap, accessToken: identity.accessToken });
       setMessages(bootstrap.messages.map(asUiMessage));
-      setMood(bootstrap.mood);
-      setDraft("");
+      dispatch({ type: "companion-updated", bootstrap, mood: bootstrap.mood });
       if (composerRef.current) composerRef.current.style.height = "50px";
       window.localStorage.setItem(
         `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`,
         "confirmed",
       );
       play("share");
-      setIsSelectorOpen(false);
     } catch (companionError) {
-      setSetupError("The companion change could not be saved. Please try again.");
+      dispatch({
+        type: "set-setup-error",
+        error: "The companion change could not be saved. Please try again.",
+      });
       console.error(companionError);
     } finally {
-      setIsChangingCompanion(false);
+      dispatch({ type: "set-changing-companion", changing: false });
     }
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const text = draft.trim();
-    if (!text || !identity || status !== "ready") return;
+    const text = state.draft.trim();
+    if (!text || !state.identity || status !== "ready") return;
     play("send");
-    setDraft("");
+    dispatch({ type: "set-draft", draft: "" });
     if (composerRef.current) composerRef.current.style.height = "50px";
     clearError();
     await sendMessage({ text });
   };
 
   const shareRoom = async () => {
-    if (!identity) return;
+    if (!state.identity) return;
     const roomUrl = new URL(
-      appRoutes.room(identity.bootstrap.session.id),
+      appRoutes.room(state.identity.bootstrap.session.id),
       window.location.origin,
     ).toString();
     await navigator.clipboard.writeText(roomUrl);
     play("share");
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    dispatch({ type: "set-copied", copied: true });
+    window.setTimeout(() => dispatch({ type: "set-copied", copied: false }), 1800);
   };
 
-  const isLoading = !identity && !setupError;
+  const isLoading = !state.identity && !state.setupError;
   const isStreaming = status === "submitted" || status === "streaming";
-  const latestAssistant = [...messages].reverse().find(isAssistantMessage);
-  const companionId = identity?.bootstrap.session.companionId ?? "rina";
+  const companionId = state.identity?.bootstrap.session.companionId ?? "rina";
   const companion = COMPANIONS[companionId];
-  const roomStatus = identity ? listenerLabel(viewerCount) : "opening a private room";
+  const roomStatus = state.identity ? listenerLabel(state.viewerCount) : "opening a private room";
 
   return (
     <main className="persona-shell">
       <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
       <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
-      {isSelectorOpen && identity ? (
+      {state.isSelectorOpen && state.identity ? (
         <section
           className="companion-picker"
           role="dialog"
@@ -286,7 +346,7 @@ export function ChatExperience() {
           aria-labelledby="companion-picker-title"
           onClick={(event) => {
             if (event.target === event.currentTarget) {
-              setIsSelectorOpen(false);
+              dispatch({ type: "set-selector-open", open: false });
             }
           }}
         >
@@ -296,7 +356,7 @@ export function ChatExperience() {
               <button
                 className="icon-button"
                 type="button"
-                onClick={() => setIsSelectorOpen(false)}
+                onClick={() => dispatch({ type: "set-selector-open", open: false })}
                 aria-label="Close companion picker"
               >
                 <X aria-hidden="true" size={18} />
@@ -311,7 +371,7 @@ export function ChatExperience() {
                   className={cn("companion-choice", candidate.id === companionId && "companion-choice--selected")}
                   type="button"
                   onClick={() => void chooseCompanion(candidate.id)}
-                  disabled={isChangingCompanion}
+                  disabled={state.isChangingCompanion}
                 >
                   <RinaAvatar companionId={candidate.id} mood="neutral" size="message" />
                   <span className="companion-choice__copy">
@@ -326,153 +386,186 @@ export function ChatExperience() {
         </section>
       ) : null}
 
-      <section className="chat-stage" aria-label={`Chat with ${companion.name}`}>
+      <div className="chat-stage">
         <header className="persona-header">
           <div className="persona-header__identity">
-            <Sparkles aria-hidden="true" size={18} />
+            <Radio aria-hidden="true" size={16} />
             <span>Persona Room</span>
-            <span className="persona-header__slash">/</span>
+            <span className="persona-header__slash" aria-hidden="true">/</span>
             <span className="persona-header__channel">private afterglow</span>
           </div>
           <div className="persona-header__actions">
             <button
               className="icon-button"
               type="button"
-              onClick={() => setSoundEnabled((current) => !current)}
-              aria-label={soundEnabled ? "Turn interface sounds off" : "Turn interface sounds on"}
-              aria-pressed={soundEnabled}
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              aria-label={soundEnabled ? "Mute interface sound" : "Enable interface sound"}
             >
-              {soundEnabled ? <Volume2 aria-hidden="true" size={17} /> : <VolumeX aria-hidden="true" size={17} />}
+              {soundEnabled ? <Volume2 aria-hidden="true" size={16} /> : <VolumeX aria-hidden="true" size={16} />}
             </button>
-            <button
-              className="share-button"
-              type="button"
-              onClick={() => void shareRoom()}
-              disabled={!identity}
-            >
-              {copied ? <Check aria-hidden="true" size={16} /> : <Copy aria-hidden="true" size={16} />}
-              <span>{copied ? "Link copied" : "Invite the room"}</span>
+            <button className="share-button" type="button" onClick={() => void shareRoom()}>
+              {state.copied ? <Check aria-hidden="true" size={15} /> : <Copy aria-hidden="true" size={15} />}
+              <span>{state.copied ? "Link Copied" : "Invite the room"}</span>
             </button>
           </div>
         </header>
 
         <div className="chat-layout">
-          <aside className="persona-profile" aria-label={`${companion.name}’s live profile`}>
+          <aside className="persona-profile">
             <div className="persona-profile__halo" aria-hidden="true" />
-            <div className="persona-profile__live"><Radio aria-hidden="true" size={12} /> LIVE NOW</div>
-            <RinaAvatar companionId={companionId} mood={mood} />
-            <div className="persona-profile__copy">
-              <p className="eyebrow">YOUR {companion.role}</p>
-              <h1>{companion.name}</h1>
-              <p className="persona-profile__line">{companion.tagline}</p>
+            <div className="persona-profile__live">
+              <span className="presence-pulse" aria-hidden="true" />
+              <span>LIVE</span>
             </div>
+
+            <RinaAvatar companionId={companionId} mood={state.mood} size="hero" />
+
+            <div className="persona-profile__copy">
+              <span className="eyebrow">
+                <Sparkles aria-hidden="true" size={12} />
+                {companion.tagline}
+              </span>
+              <h1>{companion.name}</h1>
+              <p className="persona-profile__line">{companion.selectorCopy}</p>
+            </div>
+
             <div className="persona-profile__signals">
-              <div className="persona-profile__status">
-                <span className="presence-pulse" aria-hidden="true" />
+              <div className="persona-profile__mood" role="status" aria-label={`Current mood: ${state.mood}`}>
+                <Heart aria-hidden="true" size={13} />
+                <span>Feeling <strong>{state.mood}</strong></span>
+              </div>
+              <div className="persona-profile__status" role="status" aria-label={`Room status: ${roomStatus}`}>
+                <span className={cn("connection-dot", state.identity && "connection-dot--live")} aria-hidden="true" />
                 <span>{roomStatus}</span>
               </div>
-              <div className="persona-profile__mood">
-                <Heart aria-hidden="true" size={15} />
-                <span>feeling <strong>{mood}</strong></span>
-              </div>
             </div>
-            <button className="persona-profile__change" type="button" onClick={() => setIsSelectorOpen(true)}>
-              Change companion
+
+            <button
+              className="persona-profile__change"
+              type="button"
+              onClick={() => dispatch({ type: "set-selector-open", open: true })}
+            >
+              Change companion ({companion.name})
             </button>
           </aside>
 
-          <section className="chat-card" aria-label={`Private conversation with ${companion.name}`}>
+          <section className="chat-card">
             <div className="chat-card__topline">
               <div className="conversation-title">
-                <span className={cn("connection-dot", identity && "connection-dot--live")}>
-                  {identity ? "memory on" : "connecting"}
-                </span>
-                <span>Private conversation</span>
+                <span>memory onPrivate conversation</span>
               </div>
               <span className="chat-card__hint">say it like you mean it</span>
             </div>
 
-            <div ref={messageListRef} className="message-list" aria-live="polite" aria-label={`Conversation with ${companion.name}`}>
+            <div className="message-list" ref={messageListRef} tabIndex={0} aria-label="Conversation transcript">
               {isLoading ? (
-                <div className="empty-message">
-                  <LoaderCircle className="spin" aria-hidden="true" /> Opening the room…
+                <div className="waiting-state" role="status">
+                  <LoaderCircle aria-hidden="true" size={20} className="spin" />
+                  <span>Opening {companion.name}’s room...</span>
                 </div>
-              ) : null}
-              {setupError ? <div className="error-message">{setupError}</div> : null}
-              {!isLoading && !setupError && messages.length === 0 ? (
+              ) : state.setupError ? (
+                <div className="error-message">
+                  <p>{state.setupError}</p>
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="conversation-welcome">
-                  <span className="conversation-welcome__spark"><Sparkles aria-hidden="true" size={16} /></span>
-                  <p>{companion.welcome}</p>
-                  <span>Start with a thought you would not send to just anyone.</span>
+                  <div className="conversation-welcome__spark">
+                    <Sparkles aria-hidden="true" size={18} />
+                  </div>
+                  <p>Say hello to {companion.name}</p>
+                  <span>{companion.welcome}</span>
                 </div>
-              ) : null}
-              {messages.map((message, index) => (
-                <MessageBubble
-                  key={message.id}
-                  role={message.role === "assistant" ? "assistant" : "user"}
-                  text={messageText(message)}
-                  assistantName={companion.name}
-                  isStreaming={
-                    isStreaming && index === messages.length - 1 && message.role === "assistant"
+              ) : (
+                messages.map((message) => {
+                  const content = messageText(message);
+                  const bubbleRole = message.role === "user" ? "user" : "assistant";
+                  if (!content && message.role === "assistant" && isStreaming && message === messages[messages.length - 1]) {
+                    return (
+                      <MessageBubble
+                        key={message.id}
+                        role="assistant"
+                        text=""
+                        assistantName={companion.name}
+                        isStreaming={true}
+                      />
+                    );
                   }
-                />
-              ))}
-              {isStreaming && latestAssistant?.role !== "assistant" ? (
-                <MessageBubble role="assistant" text="" assistantName={companion.name} isStreaming />
-              ) : null}
+                  return (
+                    <MessageBubble
+                      key={message.id}
+                      role={bubbleRole}
+                      text={content}
+                      assistantName={companion.name}
+                      isStreaming={
+                        isStreaming &&
+                        message.role === "assistant" &&
+                        message === messages[messages.length - 1]
+                      }
+                    />
+                  );
+                })
+              )}
             </div>
 
-            {error ? (
-              <div className="error-message error-message--actionable">
-                <span>{error.message || `${companion.name}’s connection took a tiny pause.`}</span>
-                <button type="button" onClick={() => clearError()}>Try again</button>
+            {(error || state.setupError) && (
+              <div className="error-message error-message--actionable" role="alert">
+                <span>{error?.message ?? state.setupError}</span>
+                {error && (
+                  <button type="button" onClick={() => clearError()}>
+                    Try again
+                  </button>
+                )}
               </div>
-            ) : null}
+            )}
 
-            <form className="composer" onSubmit={(event) => void submit(event)}>
+            <form className="composer" onSubmit={submit}>
               <div className="composer__field">
                 <div className="composer__field-top">
-                  <label htmlFor="rina-message">Message {companion.name}</label>
-                  <div className="composer__meta" aria-live="polite">
-                    <span>{draft.length}/{APP_CONFIG.maxMessageCharacters}</span>
-                    {isStreaming ? <span>{companion.name} is replying</span> : <span>Enter to send · Shift + Enter for a new line</span>}
+                  <label htmlFor="message-input">Message {companion.name}</label>
+                  <div className="composer__meta">
+                    <span>{state.draft.length}/{APP_CONFIG.maxMessageCharacters}</span>
+                    <span>Enter to send</span>
+                    <span>Shift + Enter for a new line</span>
                   </div>
                 </div>
                 <textarea
                   ref={composerRef}
-                  id="rina-message"
-                  value={draft}
+                  id="message-input"
+                  value={state.draft}
                   onChange={(event) => {
-                    const nextDraft = event.target.value.slice(0, APP_CONFIG.maxMessageCharacters);
-                    event.target.value = nextDraft;
-                    setDraft(nextDraft);
-                    resizeComposer(event.currentTarget);
+                    const value = event.target.value;
+                    if (value.length <= APP_CONFIG.maxMessageCharacters) {
+                      dispatch({ type: "set-draft", draft: value });
+                      resizeComposer(event.target);
+                    }
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
-                      event.currentTarget.form?.requestSubmit();
+                      if (state.draft.trim() && !isStreaming) {
+                        void submit(event as unknown as FormEvent<HTMLFormElement>);
+                      }
                     }
                   }}
-                  placeholder={`Write something honest to ${companion.name}…`}
+                  placeholder={`Write something honest to ${companion.name}...`}
                   rows={1}
-                  disabled={!identity || isStreaming}
                 />
               </div>
+
               {isStreaming ? (
                 <button
                   className="composer__send composer__send--stop"
                   type="button"
-                  onClick={() => void stop()}
-                  aria-label={`Stop ${companion.name}`}
+                  onClick={() => stop()}
+                  aria-label="Stop generating response"
                 >
-                  <Square aria-hidden="true" size={15} fill="currentColor" />
+                  <Square aria-hidden="true" size={18} fill="currentColor" />
                 </button>
               ) : (
                 <button
                   className="composer__send"
                   type="submit"
-                  disabled={!draft.trim() || !identity}
+                  disabled={!state.draft.trim() || isLoading}
                   aria-label="Send message"
                 >
                   <Send aria-hidden="true" size={18} />
@@ -481,7 +574,7 @@ export function ChatExperience() {
             </form>
           </section>
         </div>
-      </section>
+      </div>
     </main>
   );
 }
