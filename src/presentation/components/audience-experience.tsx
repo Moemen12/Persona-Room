@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, Radio, Users } from "lucide-react";
+import { Heart, LoaderCircle, Radio, Sparkles, Users, Volume2, VolumeX } from "lucide-react";
 import { useReducer } from "react";
 
 import type { RoomBroadcast, RoomSnapshot, VoteTally } from "@/features/audience/audience.types";
@@ -10,6 +10,7 @@ import { VOTE_OPTIONS, type VoteOption } from "@/lib/config/app";
 import { cn } from "@/lib/utils";
 import { MessageBubble } from "@/presentation/components/message-bubble";
 import { RinaAvatar } from "@/presentation/components/rina-avatar";
+import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
 
@@ -41,7 +42,12 @@ function createFingerprint() {
 
 function audienceReducer(state: AudienceState, action: AudienceAction): AudienceState {
   if (action.type === "loaded") {
-    return { ...state, snapshot: action.snapshot, fingerprint: action.fingerprint, loading: false };
+    return {
+      ...state,
+      snapshot: action.snapshot,
+      fingerprint: action.fingerprint,
+      loading: false,
+    };
   }
   if (action.type === "failed") return { ...state, loading: false, error: action.message };
   if (action.type === "viewer-count") return { ...state, viewerCount: action.count };
@@ -54,7 +60,11 @@ function audienceReducer(state: AudienceState, action: AudienceAction): Audience
     : state.snapshot.messages;
   return {
     ...state,
-    mood: event.type === "vote-tally" || event.type === "persona-reaction" ? "surprised" : state.mood,
+    submitting: event.type === "vote-tally" ? undefined : state.submitting,
+    mood:
+      event.type === "vote-tally" || event.type === "persona-reaction"
+        ? "surprised"
+        : state.mood,
     snapshot: {
       ...state.snapshot,
       messages: nextMessages,
@@ -65,8 +75,13 @@ function audienceReducer(state: AudienceState, action: AudienceAction): Audience
 
 const initialState: AudienceState = { loading: true, mood: "neutral", viewerCount: 0 };
 
+function audienceLabel(viewerCount: number) {
+  return viewerCount === 1 ? "1 person is here" : `${viewerCount} people are here`;
+}
+
 export function AudienceExperience({ roomId }: { roomId: string }) {
   const [state, dispatch] = useReducer(audienceReducer, initialState);
+  const { play, setSoundEnabled, soundEnabled } = useInterfaceSound();
 
   useMountEffect(() => {
     const controller = new AbortController();
@@ -81,7 +96,10 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
       } catch (error) {
         if (!controller.signal.aborted) {
           console.error(error);
-          dispatch({ type: "failed", message: "This room is quiet right now. Try the link again in a moment." });
+          dispatch({
+            type: "failed",
+            message: "This room is quiet right now. Try the link again in a moment.",
+          });
         }
       }
     };
@@ -97,6 +115,7 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
 
   const vote = async (option: VoteOption) => {
     if (!state.fingerprint || state.submitting) return;
+    play("vote");
     dispatch({ type: "submitting", option });
     try {
       const response = await fetch(appRoutes.api.vote(roomId), {
@@ -104,7 +123,10 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ option, fingerprint: state.fingerprint }),
       });
-      const result = (await response.json()) as { tally?: VoteTally; error?: { message?: string } };
+      const result = (await response.json()) as {
+        tally?: VoteTally;
+        error?: { message?: string };
+      };
       if (!response.ok) throw new Error(result.error?.message ?? "Vote unavailable");
       dispatch({
         type: "room-event",
@@ -124,61 +146,98 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
 
   return (
     <main className="audience-shell">
+      <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
+      <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
       <section className="audience-room">
         <header className="audience-header">
           <div>
             <p className="eyebrow"><Radio aria-hidden="true" size={13} /> LIVE AUDIENCE ROOM</p>
-            <h1>Rina is listening</h1>
+            <h1>Rina is listening.</h1>
           </div>
-          <span className="audience-viewers"><Users aria-hidden="true" size={15} /> {state.viewerCount} watching</span>
+          <div className="audience-header__actions">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setSoundEnabled((current) => !current)}
+              aria-label={soundEnabled ? "Turn interface sounds off" : "Turn interface sounds on"}
+              aria-pressed={soundEnabled}
+            >
+              {soundEnabled ? <Volume2 aria-hidden="true" size={17} /> : <VolumeX aria-hidden="true" size={17} />}
+            </button>
+            <span className="audience-viewers"><Users aria-hidden="true" size={15} /> {audienceLabel(state.viewerCount)}</span>
+          </div>
         </header>
 
-        <div className="audience-avatar-row">
-          <RinaAvatar mood={state.mood} size="room" />
-          <p>Help steer the next little bit of chaos.</p>
-        </div>
-
-        <section className="audience-transcript" aria-live="polite">
-          <div className="audience-transcript__header"><span>LIVE TRANSCRIPT</span><span>read only</span></div>
-          {state.loading ? <div className="empty-message"><LoaderCircle className="spin" aria-hidden="true" /> Joining the room…</div> : null}
-          {state.error ? <div className="error-message">{state.error}</div> : null}
-          {!state.loading && !state.error && state.snapshot?.messages.length === 0 ? (
-            <div className="waiting-state">Waiting for someone to talk to Rina…</div>
-          ) : null}
-          {state.snapshot?.messages.map((message) => (
-            <MessageBubble key={message.id} role={message.role} text={message.content} createdAt={message.createdAt} />
-          ))}
+        <section className="audience-spotlight" aria-label="Rina live status">
+          <div className="audience-spotlight__avatar"><RinaAvatar mood={state.mood} size="room" /></div>
+          <div className="audience-spotlight__copy">
+            <span className="live-chip"><span className="presence-pulse" aria-hidden="true" /> OPEN TO THE ROOM</span>
+            <p>She can feel the room leaning in.</p>
+            <span>Vote for the next little spark.</span>
+          </div>
+          <div className="audience-spotlight__mood"><Heart aria-hidden="true" size={15} /> feeling <strong>{state.mood}</strong></div>
         </section>
 
-        <section className="vote-panel" aria-labelledby="vote-heading">
-          <div className="vote-panel__header">
-            <div>
-              <p className="eyebrow">YOUR TURN</p>
-              <h2 id="vote-heading">What should Rina do?</h2>
+        <div className="audience-layout">
+          <section className="audience-transcript" aria-live="polite">
+            <div className="audience-transcript__header">
+              <span><Sparkles aria-hidden="true" size={13} /> LIVE TRANSCRIPT</span>
+              <span>read only</span>
             </div>
-            <span>one tap</span>
-          </div>
-          <div className="vote-options">
-            {VOTE_OPTIONS.map((option) => {
-              const count = tally?.[option.value] ?? 0;
-              const percent = Math.round((count / highestVote) * 100);
-              const selected = state.submitting === option.value;
-              return (
-                <button
-                  key={option.value}
-                  className={cn("vote-option", selected && "vote-option--selected")}
-                  type="button"
-                  onClick={() => void vote(option.value)}
-                  disabled={!state.snapshot || Boolean(state.submitting)}
-                >
-                  <span className="vote-option__main"><span className="vote-option__emoji">{option.emoji}</span>{option.label}</span>
-                  <span className="vote-option__count">{count}</span>
-                  <span className="vote-option__track"><span style={{ width: `${percent}%` }} /></span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+            <div className="audience-transcript__body">
+              {state.loading ? (
+                <div className="empty-message"><LoaderCircle className="spin" aria-hidden="true" /> Joining the room…</div>
+              ) : null}
+              {state.error ? <div className="error-message">{state.error}</div> : null}
+              {!state.loading && !state.error && state.snapshot?.messages.length === 0 ? (
+                <div className="waiting-state">Waiting for someone to talk to Rina…</div>
+              ) : null}
+              {state.snapshot?.messages.map((message) => (
+                <MessageBubble
+                  key={message.id}
+                  role={message.role}
+                  text={message.content}
+                  createdAt={message.createdAt}
+                />
+              ))}
+            </div>
+          </section>
+
+          <aside className="vote-panel" aria-labelledby="vote-heading">
+            <div className="vote-panel__header">
+              <div>
+                <p className="eyebrow">YOUR TURN</p>
+                <h2 id="vote-heading">Pick her next move.</h2>
+              </div>
+              <span>one tap</span>
+            </div>
+            <p className="vote-panel__description">The room decides what Rina does next. Your vote lands live.</p>
+            <div className="vote-options">
+              {VOTE_OPTIONS.map((option) => {
+                const count = tally?.[option.value] ?? 0;
+                const percent = Math.round((count / highestVote) * 100);
+                const selected = state.submitting === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    className={cn("vote-option", selected && "vote-option--selected")}
+                    type="button"
+                    onClick={() => void vote(option.value)}
+                    disabled={!state.snapshot || Boolean(state.submitting)}
+                  >
+                    <span className="vote-option__main">
+                      <span className="vote-option__emoji">{option.emoji}</span>
+                      <span>{option.label}</span>
+                    </span>
+                    <span className="vote-option__count">{count}</span>
+                    <span className="vote-option__track"><span style={{ width: `${percent}%` }} /></span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="vote-panel__foot"><span className="presence-pulse" aria-hidden="true" /> reactions update for everyone</div>
+          </aside>
+        </div>
       </section>
     </main>
   );

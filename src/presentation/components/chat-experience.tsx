@@ -1,8 +1,19 @@
 "use client";
 
-import { DefaultChatTransport, type UIMessage } from "ai";
 import { Chat, useChat } from "@ai-sdk/react";
-import { Check, Copy, LoaderCircle, Send, Sparkles, Square } from "lucide-react";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import {
+  Check,
+  Copy,
+  Heart,
+  LoaderCircle,
+  Radio,
+  Send,
+  Sparkles,
+  Square,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import type { RoomBroadcast } from "@/features/audience/audience.types";
@@ -14,6 +25,7 @@ import { APP_CONFIG } from "@/lib/config/app";
 import { cn } from "@/lib/utils";
 import { MessageBubble } from "@/presentation/components/message-bubble";
 import { RinaAvatar } from "@/presentation/components/rina-avatar";
+import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
 
@@ -45,13 +57,21 @@ function asUiMessage(message: SessionBootstrap["messages"][number]): UIMessage {
 
 function messageText(message: UIMessage) {
   return message.parts
-    .filter((part): part is Extract<(typeof message.parts)[number], { type: "text" }> => part.type === "text")
+    .filter(
+      (part): part is Extract<(typeof message.parts)[number], { type: "text" }> =>
+        part.type === "text",
+    )
     .map((part) => part.text)
     .join("");
 }
 
 function isAssistantMessage(message: UIMessage) {
   return message.role === "assistant";
+}
+
+function listenerLabel(viewerCount: number) {
+  if (viewerCount === 0) return "private for now";
+  return `${viewerCount} ${viewerCount === 1 ? "listener" : "listeners"}`;
 }
 
 export function ChatExperience() {
@@ -61,6 +81,7 @@ export function ChatExperience() {
   const [setupError, setSetupError] = useState<string>();
   const [copied, setCopied] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
+  const { play, setSoundEnabled, soundEnabled } = useInterfaceSound();
 
   const [chat] = useState(
     () =>
@@ -101,7 +122,10 @@ export function ChatExperience() {
         const state = { bootstrap, accessToken: session.access_token };
         window.sessionStorage.setItem(
           CHAT_AUTH_STORAGE_KEY,
-          JSON.stringify({ sessionId: bootstrap.session.id, accessToken: session.access_token }),
+          JSON.stringify({
+            sessionId: bootstrap.session.id,
+            accessToken: session.access_token,
+          }),
         );
         setIdentity(state);
         setMood(bootstrap.mood);
@@ -127,7 +151,9 @@ export function ChatExperience() {
       const roomMessage = event.message;
       if (roomMessage && roomMessage.role === "assistant") {
         setMessages((current) => {
-          if (current.some((message) => messageText(message) === roomMessage.content)) return current;
+          if (current.some((message) => messageText(message) === roomMessage.content)) {
+            return current;
+          }
           return [
             ...current,
             {
@@ -145,6 +171,7 @@ export function ChatExperience() {
     event.preventDefault();
     const text = draft.trim();
     if (!text || !identity || status !== "ready") return;
+    play("send");
     setDraft("");
     clearError();
     await sendMessage({ text });
@@ -157,6 +184,7 @@ export function ChatExperience() {
       window.location.origin,
     ).toString();
     await navigator.clipboard.writeText(roomUrl);
+    play("share");
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
@@ -164,96 +192,152 @@ export function ChatExperience() {
   const isLoading = !identity && !setupError;
   const isStreaming = status === "submitted" || status === "streaming";
   const latestAssistant = [...messages].reverse().find(isAssistantMessage);
+  const roomStatus = identity ? listenerLabel(viewerCount) : "opening a private room";
 
   return (
     <main className="persona-shell">
+      <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
+      <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
       <section className="chat-stage" aria-label="Chat with Rina">
         <header className="persona-header">
           <div className="persona-header__identity">
             <Sparkles aria-hidden="true" size={18} />
             <span>Persona Room</span>
+            <span className="persona-header__slash">/</span>
+            <span className="persona-header__channel">private afterglow</span>
           </div>
-          <button className="share-button" type="button" onClick={() => void shareRoom()} disabled={!identity}>
-            {copied ? <Check aria-hidden="true" size={16} /> : <Copy aria-hidden="true" size={16} />}
-            <span>{copied ? "Link copied" : "Share audience link"}</span>
-          </button>
+          <div className="persona-header__actions">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setSoundEnabled((current) => !current)}
+              aria-label={soundEnabled ? "Turn interface sounds off" : "Turn interface sounds on"}
+              aria-pressed={soundEnabled}
+            >
+              {soundEnabled ? <Volume2 aria-hidden="true" size={17} /> : <VolumeX aria-hidden="true" size={17} />}
+            </button>
+            <button
+              className="share-button"
+              type="button"
+              onClick={() => void shareRoom()}
+              disabled={!identity}
+            >
+              {copied ? <Check aria-hidden="true" size={16} /> : <Copy aria-hidden="true" size={16} />}
+              <span>{copied ? "Link copied" : "Invite the room"}</span>
+            </button>
+          </div>
         </header>
 
-        <div className="persona-hero">
-          <RinaAvatar mood={mood} />
-          <div className="persona-hero__copy">
-            <p className="eyebrow">LIVE VIRTUAL ARTIST</p>
-            <h1>Rina</h1>
-            <p className="mood-label">mood: <strong>{mood}</strong></p>
-            {identity ? <p className="viewer-count">{viewerCount} watching your room</p> : null}
-          </div>
-        </div>
-
-        <div className="chat-card">
-          <div className="chat-card__topline">
-            <span>Private conversation</span>
-            <span className={cn("connection-dot", identity ? "connection-dot--live" : "")}>
-              {identity ? "memory on" : "connecting"}
-            </span>
-          </div>
-
-          <div className="message-list" aria-live="polite">
-            {isLoading ? (
-              <div className="empty-message"><LoaderCircle className="spin" aria-hidden="true" /> Opening Rina’s room…</div>
-            ) : null}
-            {setupError ? <div className="error-message">{setupError}</div> : null}
-            {!isLoading && !setupError && messages.length === 0 ? (
-              <MessageBubble
-                role="assistant"
-                text="Hey — you found me. Tell me one thing about yourself, and I promise I’ll remember it."
-              />
-            ) : null}
-            {messages.map((message, index) => (
-              <MessageBubble
-                key={message.id}
-                role={message.role === "assistant" ? "assistant" : "user"}
-                text={messageText(message)}
-                isStreaming={isStreaming && index === messages.length - 1 && message.role === "assistant"}
-              />
-            ))}
-            {isStreaming && latestAssistant?.role !== "assistant" ? (
-              <MessageBubble role="assistant" text="" isStreaming />
-            ) : null}
-          </div>
-
-          {error ? (
-            <div className="error-message error-message--actionable">
-              <span>{error.message || "Rina’s brain took a tiny nap."}</span>
-              <button type="button" onClick={() => clearError()}>Try again</button>
+        <div className="chat-layout">
+          <aside className="persona-profile" aria-label="Rina’s live profile">
+            <div className="persona-profile__halo" aria-hidden="true" />
+            <div className="persona-profile__live"><Radio aria-hidden="true" size={12} /> LIVE NOW</div>
+            <RinaAvatar mood={mood} />
+            <div className="persona-profile__copy">
+              <p className="eyebrow">YOUR VIRTUAL ARTIST</p>
+              <h1>Rina</h1>
+              <p className="persona-profile__line">Soft voice. Bright little chaos.</p>
             </div>
-          ) : null}
+            <div className="persona-profile__status">
+              <span className="presence-pulse" aria-hidden="true" />
+              <span>{roomStatus}</span>
+            </div>
+            <div className="persona-profile__mood">
+              <Heart aria-hidden="true" size={15} />
+              <span>feeling <strong>{mood}</strong></span>
+            </div>
+          </aside>
 
-          <form className="composer" onSubmit={(event) => void submit(event)}>
-            <label className="sr-only" htmlFor="rina-message">Message Rina</label>
-            <textarea
-              id="rina-message"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value.slice(0, APP_CONFIG.maxMessageCharacters))}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
+          <section className="chat-card" aria-label="Private conversation">
+            <div className="chat-card__topline">
+              <div className="conversation-title">
+                <span className={cn("connection-dot", identity && "connection-dot--live")}>
+                  {identity ? "memory on" : "connecting"}
+                </span>
+                <span>Private conversation</span>
+              </div>
+              <span className="chat-card__hint">say it like you mean it</span>
+            </div>
+
+            <div className="message-list" aria-live="polite" aria-label="Conversation with Rina">
+              {isLoading ? (
+                <div className="empty-message">
+                  <LoaderCircle className="spin" aria-hidden="true" /> Opening Rina’s room…
+                </div>
+              ) : null}
+              {setupError ? <div className="error-message">{setupError}</div> : null}
+              {!isLoading && !setupError && messages.length === 0 ? (
+                <div className="conversation-welcome">
+                  <span className="conversation-welcome__spark"><Sparkles aria-hidden="true" size={16} /></span>
+                  <p>Rina saved you a little corner of the night.</p>
+                  <span>Start with a thought you would not send to just anyone.</span>
+                </div>
+              ) : null}
+              {messages.map((message, index) => (
+                <MessageBubble
+                  key={message.id}
+                  role={message.role === "assistant" ? "assistant" : "user"}
+                  text={messageText(message)}
+                  isStreaming={
+                    isStreaming && index === messages.length - 1 && message.role === "assistant"
+                  }
+                />
+              ))}
+              {isStreaming && latestAssistant?.role !== "assistant" ? (
+                <MessageBubble role="assistant" text="" isStreaming />
+              ) : null}
+            </div>
+
+            {error ? (
+              <div className="error-message error-message--actionable">
+                <span>{error.message || "Rina’s brain took a tiny nap."}</span>
+                <button type="button" onClick={() => clearError()}>Try again</button>
+              </div>
+            ) : null}
+
+            <form className="composer" onSubmit={(event) => void submit(event)}>
+              <label className="sr-only" htmlFor="rina-message">Message Rina</label>
+              <textarea
+                id="rina-message"
+                value={draft}
+                onChange={(event) =>
+                  setDraft(event.target.value.slice(0, APP_CONFIG.maxMessageCharacters))
                 }
-              }}
-              placeholder="Tell Rina something real…"
-              rows={1}
-              disabled={!identity || isStreaming}
-            />
-            {isStreaming ? (
-              <button className="composer__send composer__send--stop" type="button" onClick={() => void stop()} aria-label="Stop Rina">
-                <Square aria-hidden="true" size={15} fill="currentColor" />
-              </button>
-            ) : (
-              <button className="composer__send" type="submit" disabled={!draft.trim() || !identity} aria-label="Send message">
-                <Send aria-hidden="true" size={18} />
-              </button>
-            )}
-          </form>
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder="Leave Rina a little thought…"
+                rows={1}
+                disabled={!identity || isStreaming}
+              />
+              <div className="composer__meta">
+                <span>{draft.length}/{APP_CONFIG.maxMessageCharacters}</span>
+                {isStreaming ? <span>Rina is replying</span> : <span>enter to send</span>}
+              </div>
+              {isStreaming ? (
+                <button
+                  className="composer__send composer__send--stop"
+                  type="button"
+                  onClick={() => void stop()}
+                  aria-label="Stop Rina"
+                >
+                  <Square aria-hidden="true" size={15} fill="currentColor" />
+                </button>
+              ) : (
+                <button
+                  className="composer__send"
+                  type="submit"
+                  disabled={!draft.trim() || !identity}
+                  aria-label="Send message"
+                >
+                  <Send aria-hidden="true" size={18} />
+                </button>
+              )}
+            </form>
+          </section>
         </div>
       </section>
     </main>
