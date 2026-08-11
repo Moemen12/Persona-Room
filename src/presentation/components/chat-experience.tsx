@@ -14,11 +14,15 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 
 import type { RoomBroadcast } from "@/features/audience/audience.types";
 import type { SessionBootstrap } from "@/features/auth/auth.types";
-import type { PersonaMood } from "@/features/persona/persona.types";
+import {
+  COMPANIONS,
+  type CompanionId,
+  type PersonaMood,
+} from "@/features/persona/persona.types";
 import { appRoutes } from "@/infrastructure/config/routes";
 import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
 import { APP_CONFIG } from "@/lib/config/app";
@@ -35,6 +39,8 @@ interface IdentityState {
 }
 
 const CHAT_AUTH_STORAGE_KEY = "persona-room-chat-auth";
+const COMPANION_SELECTION_KEY = "persona-room-companion-selected";
+const COMPOSER_MAX_HEIGHT = 142;
 
 function chatRequestBody() {
   const stored = window.sessionStorage.getItem(CHAT_AUTH_STORAGE_KEY);
@@ -74,6 +80,12 @@ function listenerLabel(viewerCount: number) {
   return `${viewerCount} ${viewerCount === 1 ? "listener" : "listeners"}`;
 }
 
+function resizeComposer(textarea: HTMLTextAreaElement) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.min(textarea.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
+  textarea.style.overflowY = textarea.scrollHeight > COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
+}
+
 export function ChatExperience() {
   const [identity, setIdentity] = useState<IdentityState>();
   const [mood, setMood] = useState<PersonaMood>("neutral");
@@ -81,6 +93,9 @@ export function ChatExperience() {
   const [setupError, setSetupError] = useState<string>();
   const [copied, setCopied] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
+  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+  const [isChangingCompanion, setIsChangingCompanion] = useState(false);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const { play, setSoundEnabled, soundEnabled } = useInterfaceSound();
 
   const [chat] = useState(
@@ -130,9 +145,11 @@ export function ChatExperience() {
         setIdentity(state);
         setMood(bootstrap.mood);
         setMessages(bootstrap.messages.map(asUiMessage));
+        const selectionKey = `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`;
+        setIsSelectorOpen(window.localStorage.getItem(selectionKey) !== "confirmed");
       } catch (initializationError) {
         if (!controller.signal.aborted) {
-          setSetupError("Rina’s room needs its Supabase settings before she can remember you.");
+          setSetupError("The room needs its Supabase settings before it can remember you.");
           console.error(initializationError);
         }
       }
@@ -145,6 +162,7 @@ export function ChatExperience() {
     roomId: identity?.bootstrap.session.id,
     onViewerCount: setViewerCount,
     onEvent: (event: RoomBroadcast) => {
+      if (event.type === "companion-changed") return;
       if (event.type === "vote-tally" || event.type === "persona-reaction") {
         setMood("surprised");
       }
@@ -167,12 +185,52 @@ export function ChatExperience() {
     },
   });
 
+  const chooseCompanion = async (companionId: CompanionId) => {
+    if (!identity || isChangingCompanion) return;
+    setIsChangingCompanion(true);
+    try {
+      const response = await fetch(appRoutes.api.session, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${identity.accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ sessionId: identity.bootstrap.session.id, companionId }),
+      });
+      if (!response.ok) throw new Error("Companion update failed");
+
+      const bootstrapResponse = await fetch(appRoutes.api.session, {
+        method: "POST",
+        headers: { authorization: `Bearer ${identity.accessToken}` },
+      });
+      if (!bootstrapResponse.ok) throw new Error("Companion refresh failed");
+      const bootstrap = (await bootstrapResponse.json()) as SessionBootstrap;
+      setIdentity({ bootstrap, accessToken: identity.accessToken });
+      setMessages(bootstrap.messages.map(asUiMessage));
+      setMood(bootstrap.mood);
+      setDraft("");
+      if (composerRef.current) composerRef.current.style.height = "50px";
+      window.localStorage.setItem(
+        `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`,
+        "confirmed",
+      );
+      play("share");
+      setIsSelectorOpen(false);
+    } catch (companionError) {
+      setSetupError("The companion change could not be saved. Please try again.");
+      console.error(companionError);
+    } finally {
+      setIsChangingCompanion(false);
+    }
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = draft.trim();
     if (!text || !identity || status !== "ready") return;
     play("send");
     setDraft("");
+    if (composerRef.current) composerRef.current.style.height = "50px";
     clearError();
     await sendMessage({ text });
   };
@@ -192,13 +250,48 @@ export function ChatExperience() {
   const isLoading = !identity && !setupError;
   const isStreaming = status === "submitted" || status === "streaming";
   const latestAssistant = [...messages].reverse().find(isAssistantMessage);
+  const companionId = identity?.bootstrap.session.companionId ?? "rina";
+  const companion = COMPANIONS[companionId];
   const roomStatus = identity ? listenerLabel(viewerCount) : "opening a private room";
 
   return (
     <main className="persona-shell">
       <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
       <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
-      <section className="chat-stage" aria-label="Chat with Rina">
+      {isSelectorOpen && identity ? (
+        <section
+          className="companion-picker"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="companion-picker-title"
+        >
+          <div className="companion-picker__panel">
+            <span className="eyebrow"><Sparkles aria-hidden="true" size={13} /> YOUR PRIVATE ROOM</span>
+            <h2 id="companion-picker-title">Who do you want to talk with?</h2>
+            <p>Choose a companion for this room. You can change your choice later from the profile card.</p>
+            <div className="companion-picker__choices">
+              {(Object.values(COMPANIONS) as (typeof COMPANIONS)[CompanionId][]).map((candidate) => (
+                <button
+                  key={candidate.id}
+                  className={cn("companion-choice", candidate.id === companionId && "companion-choice--selected")}
+                  type="button"
+                  onClick={() => void chooseCompanion(candidate.id)}
+                  disabled={isChangingCompanion}
+                >
+                  <RinaAvatar companionId={candidate.id} mood="neutral" size="message" />
+                  <span className="companion-choice__copy">
+                    <strong>{candidate.name}</strong>
+                    <span>{candidate.gender === "female" ? "Female companion" : "Male companion"}</span>
+                    <small>{candidate.selectorCopy}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="chat-stage" aria-label={`Chat with ${companion.name}`}>
         <header className="persona-header">
           <div className="persona-header__identity">
             <Sparkles aria-hidden="true" size={18} />
@@ -229,26 +322,31 @@ export function ChatExperience() {
         </header>
 
         <div className="chat-layout">
-          <aside className="persona-profile" aria-label="Rina’s live profile">
+          <aside className="persona-profile" aria-label={`${companion.name}’s live profile`}>
             <div className="persona-profile__halo" aria-hidden="true" />
             <div className="persona-profile__live"><Radio aria-hidden="true" size={12} /> LIVE NOW</div>
-            <RinaAvatar mood={mood} />
+            <RinaAvatar companionId={companionId} mood={mood} />
             <div className="persona-profile__copy">
-              <p className="eyebrow">YOUR VIRTUAL ARTIST</p>
-              <h1>Rina</h1>
-              <p className="persona-profile__line">Soft voice. Bright little chaos.</p>
+              <p className="eyebrow">YOUR {companion.role}</p>
+              <h1>{companion.name}</h1>
+              <p className="persona-profile__line">{companion.tagline}</p>
             </div>
-            <div className="persona-profile__status">
-              <span className="presence-pulse" aria-hidden="true" />
-              <span>{roomStatus}</span>
+            <div className="persona-profile__signals">
+              <div className="persona-profile__status">
+                <span className="presence-pulse" aria-hidden="true" />
+                <span>{roomStatus}</span>
+              </div>
+              <div className="persona-profile__mood">
+                <Heart aria-hidden="true" size={15} />
+                <span>feeling <strong>{mood}</strong></span>
+              </div>
             </div>
-            <div className="persona-profile__mood">
-              <Heart aria-hidden="true" size={15} />
-              <span>feeling <strong>{mood}</strong></span>
-            </div>
+            <button className="persona-profile__change" type="button" onClick={() => setIsSelectorOpen(true)}>
+              Change companion
+            </button>
           </aside>
 
-          <section className="chat-card" aria-label="Private conversation">
+          <section className="chat-card" aria-label={`Private conversation with ${companion.name}`}>
             <div className="chat-card__topline">
               <div className="conversation-title">
                 <span className={cn("connection-dot", identity && "connection-dot--live")}>
@@ -259,17 +357,17 @@ export function ChatExperience() {
               <span className="chat-card__hint">say it like you mean it</span>
             </div>
 
-            <div className="message-list" aria-live="polite" aria-label="Conversation with Rina">
+            <div className="message-list" aria-live="polite" aria-label={`Conversation with ${companion.name}`}>
               {isLoading ? (
                 <div className="empty-message">
-                  <LoaderCircle className="spin" aria-hidden="true" /> Opening Rina’s room…
+                  <LoaderCircle className="spin" aria-hidden="true" /> Opening the room…
                 </div>
               ) : null}
               {setupError ? <div className="error-message">{setupError}</div> : null}
               {!isLoading && !setupError && messages.length === 0 ? (
                 <div className="conversation-welcome">
                   <span className="conversation-welcome__spark"><Sparkles aria-hidden="true" size={16} /></span>
-                  <p>Rina saved you a little corner of the night.</p>
+                  <p>{companion.welcome}</p>
                   <span>Start with a thought you would not send to just anyone.</span>
                 </div>
               ) : null}
@@ -278,51 +376,60 @@ export function ChatExperience() {
                   key={message.id}
                   role={message.role === "assistant" ? "assistant" : "user"}
                   text={messageText(message)}
+                  assistantName={companion.name}
                   isStreaming={
                     isStreaming && index === messages.length - 1 && message.role === "assistant"
                   }
                 />
               ))}
               {isStreaming && latestAssistant?.role !== "assistant" ? (
-                <MessageBubble role="assistant" text="" isStreaming />
+                <MessageBubble role="assistant" text="" assistantName={companion.name} isStreaming />
               ) : null}
             </div>
 
             {error ? (
               <div className="error-message error-message--actionable">
-                <span>{error.message || "Rina’s brain took a tiny nap."}</span>
+                <span>{error.message || `${companion.name}’s connection took a tiny pause.`}</span>
                 <button type="button" onClick={() => clearError()}>Try again</button>
               </div>
             ) : null}
 
             <form className="composer" onSubmit={(event) => void submit(event)}>
-              <label className="sr-only" htmlFor="rina-message">Message Rina</label>
-              <textarea
-                id="rina-message"
-                value={draft}
-                onChange={(event) =>
-                  setDraft(event.target.value.slice(0, APP_CONFIG.maxMessageCharacters))
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                placeholder="Leave Rina a little thought…"
-                rows={1}
-                disabled={!identity || isStreaming}
-              />
-              <div className="composer__meta">
-                <span>{draft.length}/{APP_CONFIG.maxMessageCharacters}</span>
-                {isStreaming ? <span>Rina is replying</span> : <span>enter to send</span>}
+              <div className="composer__field">
+                <div className="composer__field-top">
+                  <label htmlFor="rina-message">Message {companion.name}</label>
+                  <div className="composer__meta" aria-live="polite">
+                    <span>{draft.length}/{APP_CONFIG.maxMessageCharacters}</span>
+                    {isStreaming ? <span>{companion.name} is replying</span> : <span>Enter to send · Shift + Enter for a new line</span>}
+                  </div>
+                </div>
+                <textarea
+                  ref={composerRef}
+                  id="rina-message"
+                  value={draft}
+                  onChange={(event) => {
+                    const nextDraft = event.target.value.slice(0, APP_CONFIG.maxMessageCharacters);
+                    event.target.value = nextDraft;
+                    setDraft(nextDraft);
+                    resizeComposer(event.currentTarget);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  placeholder={`Write something honest to ${companion.name}…`}
+                  rows={1}
+                  disabled={!identity || isStreaming}
+                />
               </div>
               {isStreaming ? (
                 <button
                   className="composer__send composer__send--stop"
                   type="button"
                   onClick={() => void stop()}
-                  aria-label="Stop Rina"
+                  aria-label={`Stop ${companion.name}`}
                 >
                   <Square aria-hidden="true" size={15} fill="currentColor" />
                 </button>

@@ -9,3 +9,11 @@ The sandbox audience URL cannot render a live room because required Supabase env
 A configured local preview confirms the primary **Your turn** vote panel now renders fully in the first desktop viewport beside the compact Rina status card. The transcript remains a bounded scroll region beneath the status card rather than forcing users to scroll through it before voting.
 
 The browser console no longer reports the prior server/client `disabled` attribute hydration mismatch. The only preview-console error is expected: the intentionally placeholder Supabase project rejects the demo room request as unavailable, so no live snapshot can load in this credential-free verification environment.
+
+## Composer and profile refinement review
+
+The configured local preview confirms the profile signals now sit together as a centred, consistent stack above the dedicated companion-change control. The composer label is now visually separate from the textarea, placeholder contrast is materially stronger, and keyboard guidance sits on the field’s header rather than overlapping typed content. The first preview load retained its browser-local companion-choice confirmation as designed; that local flag was reset for a dedicated picker verification next.
+
+## Companion-flow preview limitation
+
+The local placeholder configuration cannot create an anonymous Supabase session, so the browser correctly does not render the authenticated companion picker; it stops at the configuration error before an identity exists. The new picker remains covered by TypeScript and production-build validation. The preview console also reports the expected anonymous-session failure and a hydration notice that needs a separate source review before release; the placeholder session failure is not a production-flow result.

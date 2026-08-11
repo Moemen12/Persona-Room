@@ -1,4 +1,4 @@
-import type { PersonaMood } from "@/features/persona/persona.types";
+import type { CompanionId, PersonaMood } from "@/features/persona/persona.types";
 
 export interface PersonaUser {
   id: string;
@@ -10,6 +10,7 @@ export interface PersonaSession {
   id: string;
   userId: string;
   audienceEnabled: boolean;
+  companionId: CompanionId;
   createdAt: string;
 }
 

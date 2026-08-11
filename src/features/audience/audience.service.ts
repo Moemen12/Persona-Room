@@ -60,6 +60,7 @@ export async function getRoomSnapshot(sessionId: string): Promise<RoomSnapshot> 
     .from("conversations")
     .select("id, role, content, created_at")
     .eq("user_id", user.id)
+    .eq("companion_id", session.companionId)
     .order("created_at", { ascending: false })
     .limit(APP_CONFIG.publicTranscriptLimit);
 
@@ -67,6 +68,7 @@ export async function getRoomSnapshot(sessionId: string): Promise<RoomSnapshot> 
   return {
     id: session.id,
     audienceEnabled: session.audienceEnabled,
+    companionId: session.companionId,
     messages: (conversations ?? []).reverse().map((row) => ({
       id: String(row.id),
       role: row.role as "user" | "assistant",
@@ -117,10 +119,15 @@ export async function submitVote(
     () => getVoteTally(sessionId),
   );
 
-  const reaction = voteReaction(option);
+  const reaction = voteReaction(option, session.companionId);
   const { data: reactionRow, error: reactionError } = await client
     .from("conversations")
-    .insert({ user_id: user.id, role: "assistant", content: reaction })
+    .insert({
+      user_id: user.id,
+      companion_id: session.companionId,
+      role: "assistant",
+      content: reaction,
+    })
     .select("id, role, content, created_at")
     .single();
   if (reactionError || !reactionRow) throw reactionError ?? new NotFoundError("Reaction");

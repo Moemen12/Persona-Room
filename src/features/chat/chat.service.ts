@@ -9,12 +9,12 @@ import {
 import { broadcastRoomEvent } from "@/features/audience/audience.service";
 import { getInternalUserForSession } from "@/features/auth/auth.service";
 import {
-  buildRinaSystemPrompt,
+  buildCompanionSystemPrompt,
   createEmptyPersonaProfile,
   memoriesFromLines,
   moodFromEmotion,
 } from "@/features/persona/persona.service";
-import type { PersonaProfile } from "@/features/persona/persona.types";
+import type { CompanionId, PersonaProfile } from "@/features/persona/persona.types";
 import { APP_CONFIG, type VoteOption } from "@/lib/config/app";
 import { DailyLimitError, NotFoundError } from "@/lib/errors";
 import { getRedisClient, withRedisFallback } from "@/infrastructure/redis/client";
@@ -81,12 +81,16 @@ async function saveProfile(userId: string, profile: PersonaProfile) {
   }
 }
 
-async function loadConversationHistory(userId: string): Promise<StoredConversation[]> {
+async function loadConversationHistory(
+  userId: string,
+  companionId: CompanionId,
+): Promise<StoredConversation[]> {
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("conversations")
     .select("role, content")
     .eq("user_id", userId)
+    .eq("companion_id", companionId)
     .order("created_at", { ascending: false })
     .limit(APP_CONFIG.conversationHistoryLimit);
   if (error) throw error;
@@ -137,11 +141,12 @@ async function persistConversation(
   userText: string,
   assistantText: string,
   profile: PersonaProfile,
+  companionId: CompanionId,
 ) {
   const client = getSupabaseAdminClient();
   const { error: conversationError } = await client.from("conversations").insert([
-    { user_id: userId, role: "user", content: userText },
-    { user_id: userId, role: "assistant", content: assistantText },
+    { user_id: userId, companion_id: companionId, role: "user", content: userText },
+    { user_id: userId, companion_id: companionId, role: "assistant", content: assistantText },
   ]);
   if (conversationError) throw conversationError;
 
@@ -189,7 +194,7 @@ async function persistConversation(
   });
 }
 
-export async function createRinaChatStream(input: {
+export async function createCompanionChatStream(input: {
   sessionId: string;
   supabaseAuthId: string;
   messages: UIMessage[];
@@ -209,7 +214,7 @@ export async function createRinaChatStream(input: {
 
   const [profile, history, audienceVote, emotion] = await Promise.all([
     loadProfile(user.id, session.id),
-    loadConversationHistory(user.id),
+    loadConversationHistory(user.id, session.companionId),
     getLastVote(session.id),
     classifyEmotion(userText),
   ]);
@@ -219,7 +224,7 @@ export async function createRinaChatStream(input: {
   await saveProfile(user.id, profile);
 
   const geminiStream = await streamRinaResponse({
-    systemInstruction: buildRinaSystemPrompt(profile, audienceVote),
+    systemInstruction: buildCompanionSystemPrompt(profile, session.companionId, audienceVote),
     history,
     userText,
   });
@@ -239,7 +244,14 @@ export async function createRinaChatStream(input: {
       writer.write({ type: "text-end", id: textPartId });
 
       try {
-        await persistConversation(session.id, user.id, userText, assistantText, profile);
+        await persistConversation(
+          session.id,
+          user.id,
+          userText,
+          assistantText,
+          profile,
+          session.companionId,
+        );
       } catch (error) {
         console.error("Unable to persist completed Gemini conversation", error);
       }

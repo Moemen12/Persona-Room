@@ -4,7 +4,7 @@ import { Heart, LoaderCircle, Radio, Sparkles, Users, Volume2, VolumeX } from "l
 import { useReducer, useState } from "react";
 
 import type { RoomBroadcast, RoomSnapshot, VoteTally } from "@/features/audience/audience.types";
-import type { PersonaMood } from "@/features/persona/persona.types";
+import { COMPANIONS, type PersonaMood } from "@/features/persona/persona.types";
 import { appRoutes } from "@/infrastructure/config/routes";
 import { VOTE_OPTIONS, type VoteOption } from "@/lib/config/app";
 import { cn } from "@/lib/utils";
@@ -55,9 +55,18 @@ function audienceReducer(state: AudienceState, action: AudienceAction): Audience
   if (!state.snapshot) return state;
 
   const { event } = action;
+  if (event.type === "companion-changed") {
+    return {
+      ...state,
+      mood: "neutral",
+      snapshot: { ...state.snapshot, companionId: event.companionId, messages: [] },
+    };
+  }
+
+  const incomingMessage = event.message;
   const nextMessages =
-    event.message && !state.snapshot.messages.some((message) => message.id === event.message?.id)
-      ? [...state.snapshot.messages, event.message]
+    incomingMessage && !state.snapshot.messages.some((message) => message.id === incomingMessage.id)
+      ? [...state.snapshot.messages, incomingMessage]
       : state.snapshot.messages;
   return {
     ...state,
@@ -149,6 +158,7 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
 
   const tally = state.snapshot?.tally;
   const highestVote = Math.max(1, ...Object.values(tally ?? {}).map(Number));
+  const companion = COMPANIONS[state.snapshot?.companionId ?? "rina"];
 
   return (
     <main className="audience-shell">
@@ -158,7 +168,7 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
         <header className="audience-header">
           <div>
             <p className="eyebrow"><Radio aria-hidden="true" size={13} /> LIVE AUDIENCE ROOM</p>
-            <h1>Rina is listening.</h1>
+            <h1>{companion.name} is listening.</h1>
           </div>
           <div className="audience-header__actions">
             <button
@@ -174,11 +184,11 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
           </div>
         </header>
 
-        <section className="audience-spotlight" aria-label="Rina live status">
-          <div className="audience-spotlight__avatar"><RinaAvatar mood={state.mood} size="room" /></div>
+        <section className="audience-spotlight" aria-label={`${companion.name} live status`}>
+          <div className="audience-spotlight__avatar"><RinaAvatar companionId={companion.id} mood={state.mood} size="room" /></div>
           <div className="audience-spotlight__copy">
             <span className="live-chip"><span className="presence-pulse" aria-hidden="true" /> OPEN TO THE ROOM</span>
-            <p>She can feel the room leaning in.</p>
+            <p>{companion.id === "rina" ? "She can feel the room leaning in." : "He can feel the room leaning in."}</p>
             <span>Vote for the next little spark.</span>
           </div>
           <div className="audience-spotlight__mood"><Heart aria-hidden="true" size={15} /> feeling <strong>{state.mood}</strong></div>
@@ -196,7 +206,7 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
               ) : null}
               {state.error ? <div className="error-message">{state.error}</div> : null}
               {!state.loading && !state.error && state.snapshot?.messages.length === 0 ? (
-                <div className="waiting-state">Waiting for someone to talk to Rina…</div>
+                <div className="waiting-state">Waiting for someone to talk to {companion.name}…</div>
               ) : null}
               {state.snapshot?.messages.map((message) => (
                 <MessageBubble
@@ -204,6 +214,7 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
                   role={message.role}
                   text={message.content}
                   createdAt={message.createdAt}
+                  assistantName={companion.name}
                 />
               ))}
             </div>
@@ -213,11 +224,11 @@ export function AudienceExperience({ roomId }: { roomId: string }) {
             <div className="vote-panel__header">
               <div>
                 <p className="eyebrow">YOUR TURN</p>
-                <h2 id="vote-heading">Pick her next move.</h2>
+                <h2 id="vote-heading">Pick {companion.id === "rina" ? "her" : "his"} next move.</h2>
               </div>
               <span>one tap</span>
             </div>
-            <p className="vote-panel__description">The room decides what Rina does next. Your vote lands live.</p>
+            <p className="vote-panel__description">The room decides what {companion.name} does next. Your vote lands live.</p>
             <div className="vote-options">
               {VOTE_OPTIONS.map((option) => {
                 const count = tally?.[option.value] ?? 0;
