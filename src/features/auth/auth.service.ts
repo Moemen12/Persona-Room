@@ -82,22 +82,20 @@ export async function getSessionBootstrap(supabaseAuthId: string): Promise<Sessi
     .select("id, role, content, created_at")
     .eq("user_id", user.id)
     .eq("companion_id", session.companionId)
-    .order("created_at", { ascending: false })
-    .limit(APP_CONFIG.conversationHistoryLimit);
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
+  const slicedConversations = (conversations ?? []).slice(-APP_CONFIG.conversationHistoryLimit);
   return {
     user,
     session,
     mood: "neutral",
-    messages: (conversations ?? [])
-      .reverse()
-      .map((row) => ({
-        id: String(row.id),
-        role: row.role as "user" | "assistant",
-        content: String(row.content),
-        createdAt: String(row.created_at),
-      })),
+    messages: slicedConversations.map((row) => ({
+      id: String(row.id),
+      role: row.role as "user" | "assistant",
+      content: String(row.content),
+      createdAt: String(row.created_at),
+    })),
   };
 }
 

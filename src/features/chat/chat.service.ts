@@ -88,14 +88,13 @@ async function loadConversationHistory(
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("conversations")
-    .select("role, content")
+    .select("role, content, created_at")
     .eq("user_id", userId)
     .eq("companion_id", companionId)
-    .order("created_at", { ascending: false })
-    .limit(APP_CONFIG.conversationHistoryLimit);
+    .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? [])
-    .reverse()
+    .slice(-APP_CONFIG.conversationHistoryLimit)
     .map((row) => ({
       role: row.role as "user" | "assistant",
       content: String(row.content),
