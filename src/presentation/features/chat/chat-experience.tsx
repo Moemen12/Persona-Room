@@ -12,7 +12,7 @@ import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
 import { getSafeChatAuth, getSafeCompanionHint, setSafeChatAuth } from "@/lib/storage";
 import { LoadingScreen } from "@/presentation/components/shared/loading-screen";
 import { useAutoSpeak } from "@/presentation/hooks/use-auto-speak";
-import { useBrowserVoice } from "@/presentation/hooks/use-browser-voice";
+import { useCompanionVoice } from "@/presentation/hooks/use-companion-voice";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
@@ -133,7 +133,11 @@ export function ChatExperience() {
     setVoiceEnabled,
     speak,
     stopSpeaking,
-  } = useBrowserVoice({ companionId });
+  } = useCompanionVoice({
+    companionId,
+    sessionId: state.identity?.bootstrap.session.id,
+    accessToken: state.identity?.accessToken,
+  });
 
   const [chat] = useState(
     () =>
@@ -295,6 +299,7 @@ export function ChatExperience() {
     messages,
     isStreaming,
     enabled: voiceEnabled,
+    resetKey: companionId,
     speak,
   });
 

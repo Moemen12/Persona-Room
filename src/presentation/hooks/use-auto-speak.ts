@@ -7,6 +7,7 @@ interface UseAutoSpeakOptions {
   messages: UIMessage[];
   isStreaming: boolean;
   enabled: boolean;
+  resetKey?: string;
   speak: (text: string) => void;
 }
 
@@ -21,26 +22,58 @@ function messageText(message: UIMessage) {
     .trim();
 }
 
-/** Synchronizes completed assistant replies with the optional browser speech enhancement. */
-export function useAutoSpeak({ messages, isStreaming, enabled, speak }: UseAutoSpeakOptions) {
-  const hasInitializedRef = useRef(false);
+/** Synchronizes completed assistant replies with the optional neural voice enhancement. */
+export function useAutoSpeak({
+  messages,
+  isStreaming,
+  enabled,
+  resetKey = "default",
+  speak,
+}: UseAutoSpeakOptions) {
+  const initializedRef = useRef(false);
+  const pendingGeneratedReplyRef = useRef(false);
+  const previousResetKeyRef = useRef(resetKey);
   const lastSpokenMessageIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
 
-    if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true;
-      if (latestAssistant) lastSpokenMessageIdRef.current = latestAssistant.id;
+    if (previousResetKeyRef.current !== resetKey) {
+      previousResetKeyRef.current = resetKey;
+      initializedRef.current = false;
+      pendingGeneratedReplyRef.current = false;
+      lastSpokenMessageIdRef.current = undefined;
       return;
     }
 
-    if (!latestAssistant || !enabled || isStreaming || latestAssistant.id === lastSpokenMessageIdRef.current) return;
+    if (!latestAssistant) return;
+
+    if (!initializedRef.current) {
+      if (isStreaming) {
+        pendingGeneratedReplyRef.current = true;
+        return;
+      }
+
+      initializedRef.current = true;
+      const text = messageText(latestAssistant);
+      const isGeneratedReply = pendingGeneratedReplyRef.current;
+      pendingGeneratedReplyRef.current = false;
+
+      if (isGeneratedReply && enabled && text) {
+        lastSpokenMessageIdRef.current = latestAssistant.id;
+        speak(text);
+      } else {
+        lastSpokenMessageIdRef.current = latestAssistant.id;
+      }
+      return;
+    }
+
+    if (latestAssistant.id === lastSpokenMessageIdRef.current || isStreaming) return;
 
     const text = messageText(latestAssistant);
     if (!text) return;
 
     lastSpokenMessageIdRef.current = latestAssistant.id;
-    speak(text);
-  }, [enabled, isStreaming, messages, speak]);
+    if (enabled) speak(text);
+  }, [enabled, isStreaming, messages, resetKey, speak]);
 }

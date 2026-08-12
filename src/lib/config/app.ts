@@ -6,6 +6,7 @@ export const APP_CONFIG = {
   conversationHistoryLimit: 8,
   memoryLimit: 6,
   profileCacheSeconds: 60 * 60,
+  voiceCacheSeconds: 7 * 24 * 60 * 60,
   voteRateLimitSeconds: 5,
   voteCacheSeconds: 5 * 60,
   dailyGeminiRequestCap: 120,

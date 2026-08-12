@@ -3,6 +3,7 @@ export const appRoutes = {
   room: (sessionId: string) => `/room/${sessionId}`,
   api: {
     chat: "/api/chat",
+    voice: "/api/voice",
     session: "/api/session",
     room: (sessionId: string) => `/api/rooms/${sessionId}`,
     vote: (sessionId: string) => `/api/rooms/${sessionId}/vote`,
