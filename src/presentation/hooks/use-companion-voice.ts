@@ -142,9 +142,17 @@ export function useCompanionVoice({
   );
 
   const playProgressiveResponse = useCallback(
-    async (response: Response, onPlaybackStarted: () => void) => {
+    async (
+      response: Response,
+      signal: AbortSignal,
+      onPlaybackStarted: () => void,
+    ) => {
       if (!response.body || !supportsAudioStreaming()) {
         throw new Error("Progressive audio is unavailable.");
+      }
+
+      if (signal.aborted) {
+        throw new DOMException("Playback aborted.", "AbortError");
       }
 
       const mediaSource = new MediaSource();
@@ -156,13 +164,30 @@ export function useCompanionVoice({
       audioRef.current = audio;
 
       const playbackEnded = new Promise<void>((resolve, reject) => {
-        audio.onended = () => resolve();
-        audio.onerror = () => reject(new Error("Progressive audio playback failed."));
+        const handleAbort = () => reject(new DOMException("Playback aborted.", "AbortError"));
+        audio.onended = () => {
+          releaseAudio();
+          setIsSpeaking(false);
+          resolve();
+        };
+        audio.onerror = () => {
+          releaseAudio();
+          setIsSpeaking(false);
+          reject(new Error("Progressive audio playback failed."));
+        };
+        signal.addEventListener("abort", handleAbort, { once: true });
       });
+      void playbackEnded.catch(() => undefined);
 
       await new Promise<void>((resolve, reject) => {
         const handleOpen = () => resolve();
+        const handleAbort = () => reject(new DOMException("Playback aborted.", "AbortError"));
+        if (signal.aborted) {
+          handleAbort();
+          return;
+        }
         mediaSource.addEventListener("sourceopen", handleOpen, { once: true });
+        signal.addEventListener("abort", handleAbort, { once: true });
         mediaSource.addEventListener(
           "error",
           () => reject(new Error("Progressive audio source failed.")),
@@ -177,11 +202,20 @@ export function useCompanionVoice({
       const appendChunk = (chunk: Uint8Array) =>
         new Promise<void>((resolve, reject) => {
           const appendable = chunk.slice().buffer;
-          const handleUpdateEnd = () => resolve();
+          const handleUpdateEnd = () => {
+            signal.removeEventListener("abort", handleAbort);
+            resolve();
+          };
+          const handleAbort = () => {
+            sourceBuffer.removeEventListener("updateend", handleUpdateEnd);
+            reject(new DOMException("Playback aborted.", "AbortError"));
+          };
           sourceBuffer.addEventListener("updateend", handleUpdateEnd, { once: true });
+          signal.addEventListener("abort", handleAbort, { once: true });
           try {
             sourceBuffer.appendBuffer(appendable);
           } catch (error) {
+            signal.removeEventListener("abort", handleAbort);
             sourceBuffer.removeEventListener("updateend", handleUpdateEnd);
             reject(error instanceof Error ? error : new Error("Audio append failed."));
           }
@@ -205,7 +239,7 @@ export function useCompanionVoice({
         await playbackEnded;
       } finally {
         reader.releaseLock();
-        if (!started) releaseAudio();
+        releaseAudio();
       }
     },
     [releaseAudio],
@@ -227,7 +261,7 @@ export function useCompanionVoice({
 
       let started = false;
       try {
-        await playProgressiveResponse(response, () => {
+        await playProgressiveResponse(response, controller.signal, () => {
           started = true;
           setIsPreparing(false);
         });

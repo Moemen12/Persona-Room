@@ -109,7 +109,7 @@ export function useAutoSpeak({
     if (!enabled) return;
 
     if (
-      !activeAssistantIdRef.current &&
+      latestAssistant.id !== activeAssistantIdRef.current &&
       latestAssistant.id !== baselineAssistantIdRef.current
     ) {
       activeAssistantIdRef.current = latestAssistant.id;
