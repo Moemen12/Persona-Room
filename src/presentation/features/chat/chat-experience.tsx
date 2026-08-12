@@ -13,6 +13,7 @@ import { getSafeChatAuth, getSafeCompanionHint, setSafeChatAuth } from "@/lib/st
 import { LoadingScreen } from "@/presentation/components/shared/loading-screen";
 import { useAutoSpeak } from "@/presentation/hooks/use-auto-speak";
 import { useCompanionVoice } from "@/presentation/hooks/use-companion-voice";
+import { useChatProactivity } from "@/presentation/hooks/use-chat-proactivity";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
@@ -294,6 +295,12 @@ export function ChatExperience() {
 
   const isLoading = !state.identity && !state.setupError;
   const isStreaming = status === "submitted" || status === "streaming";
+  const { proactiveHint } = useChatProactivity({
+    messages,
+    isStreaming,
+    companionId,
+    enabled: Boolean(state.identity),
+  });
 
   useAutoSpeak({
     messages,
@@ -354,6 +361,7 @@ export function ChatExperience() {
               setupError={state.setupError}
               companionId={companionId}
               mood={state.mood}
+              proactiveHint={proactiveHint}
             />
 
             {(error || state.setupError) && (

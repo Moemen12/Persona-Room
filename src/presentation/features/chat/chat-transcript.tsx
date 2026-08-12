@@ -12,6 +12,7 @@ interface ChatTranscriptProps {
   setupError?: string;
   companionId: CompanionId;
   mood: PersonaMood;
+  proactiveHint?: string;
 }
 
 function messageText(message: UIMessage) {
@@ -31,6 +32,7 @@ export function ChatTranscript({
   setupError,
   companionId,
   mood: _mood,
+  proactiveHint,
 }: ChatTranscriptProps) {
   const companion = COMPANIONS[companionId];
   const latestMessage = messages.at(-1);
@@ -39,7 +41,7 @@ export function ChatTranscript({
     messageCount: messages.length,
     lastMessageId: latestMessage?.id,
     resetKey: companionId,
-    contentKey: `${isStreaming ? "streaming" : "idle"}:${latestMessageText}`,
+    contentKey: `${isStreaming ? "streaming" : "idle"}:${latestMessageText}:${proactiveHint ?? ""}`,
   });
 
   return (
@@ -62,34 +64,42 @@ export function ChatTranscript({
           <span>{companion.welcome}</span>
         </div>
       ) : (
-        messages.map((message) => {
-          const content = messageText(message);
-          const bubbleRole = message.role === "user" ? "user" : "assistant";
-          if (!content && message.role === "assistant" && isStreaming && message === messages[messages.length - 1]) {
+        <>
+          {messages.map((message) => {
+            const content = messageText(message);
+            const bubbleRole = message.role === "user" ? "user" : "assistant";
+            if (!content && message.role === "assistant" && isStreaming && message === messages[messages.length - 1]) {
+              return (
+                <MessageBubble
+                  key={message.id}
+                  role="assistant"
+                  text=""
+                  assistantName={companion.name}
+                  isStreaming={true}
+                />
+              );
+            }
             return (
               <MessageBubble
                 key={message.id}
-                role="assistant"
-                text=""
+                role={bubbleRole}
+                text={content}
                 assistantName={companion.name}
-                isStreaming={true}
+                isStreaming={
+                  isStreaming &&
+                  message.role === "assistant" &&
+                  message === messages[messages.length - 1]
+                }
               />
             );
-          }
-          return (
-            <MessageBubble
-              key={message.id}
-              role={bubbleRole}
-              text={content}
-              assistantName={companion.name}
-              isStreaming={
-                isStreaming &&
-                message.role === "assistant" &&
-                message === messages[messages.length - 1]
-              }
-            />
-          );
-        })
+          })}
+          {proactiveHint && !isStreaming ? (
+            <div className="proactive-nudge" role="status">
+              <span className="proactive-nudge__spark" aria-hidden="true"><Sparkles size={13} /></span>
+              <span>{proactiveHint}</span>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

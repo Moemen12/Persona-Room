@@ -31,7 +31,10 @@ export function PersonaSidebar({
 
   return (
     <aside className="persona-profile">
-      <div className="persona-profile__halo" aria-hidden="true" />
+      <div
+        className={cn("persona-profile__halo", mood !== "neutral" && "persona-profile__halo--ripple")}
+        aria-hidden="true"
+      />
       <div className="persona-profile__live">
         <span className="presence-pulse" aria-hidden="true" />
         <span>LIVE</span>
@@ -49,7 +52,12 @@ export function PersonaSidebar({
       </div>
 
       <div className="persona-profile__signals">
-        <div className="persona-profile__mood" role="status" aria-label={`Current mood: ${mood}`}>
+        <div
+          className={cn("persona-profile__mood", mood !== "neutral" && "persona-profile__mood--active")}
+          role="status"
+          aria-label={`Current mood: ${mood}`}
+          key={mood}
+        >
           <Heart aria-hidden="true" size={13} />
           <span>Feeling <strong>{mood}</strong></span>
         </div>
