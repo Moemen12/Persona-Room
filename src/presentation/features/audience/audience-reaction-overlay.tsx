@@ -1,12 +1,12 @@
 "use client";
 
-import { Heart, Sparkles, Zap } from "lucide-react";
+import { Flame, Heart, Laugh, Sparkles, Zap } from "lucide-react";
 import type { CSSProperties } from "react";
 
 interface AudienceReactionOverlayProps {
   reaction?: {
     id: number;
-    kind: "vote" | "surprise" | "welcome";
+    kind: "vote" | "surprise" | "welcome" | "heart" | "fire" | "laugh";
     label: string;
   };
 }
@@ -16,7 +16,16 @@ const CONFETTI_COLORS = ["#f5b7ff", "#bca1ff", "#ffd88f", "#8ef0db", "#ffffff"];
 export function AudienceReactionOverlay({ reaction }: AudienceReactionOverlayProps) {
   if (!reaction) return null;
 
-  const Icon = reaction.kind === "vote" ? Zap : reaction.kind === "surprise" ? Sparkles : Heart;
+  const Icon =
+    reaction.kind === "vote"
+      ? Zap
+      : reaction.kind === "surprise"
+        ? Sparkles
+        : reaction.kind === "fire"
+          ? Flame
+          : reaction.kind === "laugh"
+            ? Laugh
+            : Heart;
 
   return (
     <div className="audience-reaction" key={reaction.id} aria-live="polite">

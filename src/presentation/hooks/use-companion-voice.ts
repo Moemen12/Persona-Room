@@ -60,6 +60,15 @@ function decodeAudioBase64(audioBase64: string) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer;
 }
 
+function isAbortError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
+}
+
 export function useCompanionVoice({
   companionId,
   sessionId,
@@ -350,7 +359,10 @@ export function useCompanionVoice({
         }
       } catch (error) {
         releaseAudio();
-        if (controller.signal.aborted) throw error;
+        // Cancellation is intentional when the user stops speaking, changes
+        // companions, disables voice, or a newer response replaces this one.
+        // It must never escape the detached queue worker as an unhandled rejection.
+        if (controller.signal.aborted || isAbortError(error)) return;
         if (!playbackStarted) {
           console.warn("Neural voice unavailable; using browser fallback.", error);
           await fallbackSpeak(item.text, callbacks);
@@ -408,6 +420,10 @@ export function useCompanionVoice({
         hasPlayedItemRef.current = true;
         item.onPlaybackFinished?.();
       }
+    } catch (error) {
+      if (!isAbortError(error)) {
+        console.error("Voice queue worker failed", error);
+      }
     } finally {
       queueWorkerActiveRef.current = false;
       if (voiceQueueRef.current.length === 0) {
@@ -445,7 +461,11 @@ export function useCompanionVoice({
       setIsSpeaking(true);
       if (!wasActive) setIsPreparing(true);
       if (wasActive) ensurePrefetch();
-      void processQueue();
+      void processQueue().catch((error: unknown) => {
+        if (!isAbortError(error)) {
+          console.error("Voice queue dispatch failed", error);
+        }
+      });
     },
     [ensurePrefetch, isSupported, processQueue, voiceEnabled],
   );

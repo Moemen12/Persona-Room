@@ -32,7 +32,7 @@ Apply a **free-first rule** to every feature: prefer browser-native Web APIs, lo
 
 Favor intentional, premium, accessible UI over generic SaaS boilerplate. The product must work on desktop and mobile, with mobile prioritizing the main information and primary action. Preserve visible focus states and keyboard access.
 
-Do not call `useEffect` directly in normal component code. Prefer derived render state, event handlers, server patterns, and remount semantics. Mount-only synchronization is permitted only for genuine external synchronization such as a browser subscription or third-party lifecycle; use a small named helper with cleanup when repeated. For async client synchronization, use `AbortController` cleanup and never commit results after the signal is aborted.
+Do not call `useEffect` directly in normal component code. Prefer derived render state, event handlers, server patterns, and remount semantics. Mount-only synchronization is permitted only for genuine external synchronization such as a browser subscription or third-party lifecycle; use a small named helper with cleanup when repeated. For async client synchronization, use `AbortController` cleanup and never commit results after the signal is aborted. AbortError is an expected cancellation path for voice and must be swallowed by queue workers and detached promises; it must never surface as an unhandled rejection.
 
 Use declarative React patterns. When related client-state fields represent one interaction flow, prefer a reducer or one structured state object rather than many loosely coordinated state setters. Use stable `useCallback` handlers for callbacks passed into synchronization hooks. Keep the AI SDK transport-based `useChat` flow for streaming conversations; do not replace it with `useActionState` or Server Actions when their sequential action dispatch would add latency or remove incremental output. Use React 19 Actions and Server Actions for atomic mutations where they improve pending/error handling and cache synchronization.
 
@@ -50,7 +50,7 @@ Client-side UI never grants permission. Authorize sensitive actions on the serve
 
 ## Supabase, Upstash, and Data
 
-Use Supabase deliberately: Auth for anonymous identity, Postgres for authoritative durable data, Realtime for room synchronization and presence, and Edge Functions only where they are a cleaner boundary than a Next.js route handler. Redis may accelerate or coordinate, but Postgres remains the persisted source of truth.
+Use Supabase deliberately: Auth for anonymous identity, Postgres for authoritative durable data, Realtime for room synchronization and presence, and Edge Functions only where they are a cleaner boundary than a Next.js route handler. Redis may accelerate or coordinate, but Postgres remains the persisted source of truth. Transient audience reactions may use validated Server Actions plus Supabase Realtime broadcast and should not become durable conversation rows. Browser voice input should use the native Web Speech API when available; it must fail gracefully when unsupported or permission is denied.
 
 Use Upstash Redis for cache-aside reads, short-lived vote limits, room tallies, transient presence information, and daily Gemini request-cap tracking. Do not force Redis into persisted relational state. Use append-only Supabase migrations for SQL-specific behavior, RLS, grants, triggers, and functions. Keep TypeScript database types in step with migration changes.
 

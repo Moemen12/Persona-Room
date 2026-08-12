@@ -27,7 +27,7 @@ export function AudienceHeader({ companionId, viewerCount }: AudienceHeaderProps
       <div className="audience-header__actions">
         <div className="audience-viewers" role="status">
           <Users aria-hidden="true" size={14} />
-          <span>{audienceLabel(viewerCount)}</span>
+          <span key={viewerCount} className="audience-viewers__label">{audienceLabel(viewerCount)}</span>
         </div>
         <button
           className="icon-button"

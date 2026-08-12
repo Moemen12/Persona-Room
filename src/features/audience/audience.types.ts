@@ -1,5 +1,5 @@
 import { type CompanionId } from "@/features/persona/persona.types";
-import { type VoteOption } from "@/lib/config/app";
+import { type AudienceReaction, type VoteOption } from "@/lib/config/app";
 import type * as audienceRepository from "./audience.repository";
 
 export type AudienceServiceDependencies = {
@@ -31,6 +31,10 @@ export type RoomBroadcast = {
   message?: RoomMessage;
   tally?: VoteTally;
   option?: VoteOption;
+} | {
+  type: "audience-reaction";
+  reaction: AudienceReaction;
+  reactionId: string;
 } | {
   type: "companion-changed";
   companionId: CompanionId;

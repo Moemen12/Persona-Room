@@ -71,6 +71,27 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
     radial-gradient(ellipse at 87% 84%, rgba(103, 44, 208, 0.16), transparent 34%),
     var(--ink);
 }
+.audience-shell--mood-surprised {
+  --stage-accent: #e6a4ff;
+  --stage-wash: rgba(226, 119, 255, 0.1);
+}
+.audience-shell--mood-happy {
+  --stage-accent: #ffd88f;
+  --stage-wash: rgba(255, 201, 103, 0.1);
+}
+.audience-shell--mood-sad-thoughtful {
+  --stage-accent: #e19aa9;
+  --stage-wash: rgba(210, 92, 125, 0.09);
+}
+.audience-shell--mood-surprised::after,
+.audience-shell--mood-happy::after,
+.audience-shell--mood-sad-thoughtful::after {
+  @apply absolute inset-0 pointer-events-none;
+  content: "";
+  background: radial-gradient(circle at 72% 18%, var(--stage-wash), transparent 42%);
+  transition: background 420ms ease-out;
+}
+
 .persona-shell::before, .audience-shell::before {
   @apply absolute inset-0 pointer-events-none;
   background-image: linear-gradient(rgba(219, 202, 255, 0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(219, 202, 255, 0.018) 1px, transparent 1px);
@@ -241,6 +262,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   background: radial-gradient(circle, rgba(157, 109, 255, 0.52), transparent 64%);
   filter: blur(12px);
 }
+.rina-avatar--listening { transform: rotate(-2deg) translateY(-1px); }
+.rina-avatar--listening .rina-avatar__glow { opacity: 0.82; }
+.rina-avatar--performing { animation: avatar-performance 720ms cubic-bezier(.23, 1, .32, 1); }
+.rina-avatar--performing .rina-avatar__glow { opacity: 1; filter: saturate(1.25); }
 .rina-avatar--speaking {
   animation: speaking-bob 820ms ease-in-out infinite;
 }
@@ -364,7 +389,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   background: rgba(5, 4, 14, 0.44);
 }
 .composer__field {
-  @apply min-w-0 rounded-[17px] transition-all duration-180;
+  @apply relative min-w-0 rounded-[17px] transition-all duration-180;
   border: 1px solid rgba(214, 199, 255, 0.14);
   background: rgba(255, 255, 255, 0.055);
 }
@@ -380,9 +405,32 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   @apply text-[var(--violet-bright)] text-[0.62rem] font-[830] tracking-[0.08em] uppercase;
 }
 .composer textarea {
-  @apply block w-full min-h-[50px] max-h-[142px] resize-none border-0 px-[13px] pt-2 pb-[13px] text-white bg-transparent outline-none text-[0.93rem] leading-[1.48];
+  @apply block w-full min-h-[50px] max-h-[142px] resize-none border-0 px-[13px] pr-[52px] pt-2 pb-[13px] text-white bg-transparent outline-none text-[0.93rem] leading-[1.48];
 }
 .composer textarea::placeholder { color: #b8afd0; opacity: 1; }
+.composer__voice-preview {
+  @apply flex items-center gap-1.5 px-[13px] pt-2 text-[0.72rem] italic;
+  color: rgba(224, 205, 255, 0.72);
+}
+.composer__voice-error {
+  @apply px-[13px] pb-2 text-[0.68rem];
+  color: #fda4af;
+}
+.composer__mic {
+  @apply absolute right-2 bottom-2 grid h-8 w-8 place-items-center rounded-xl text-[var(--lavender)] transition-all duration-150;
+  border: 1px solid rgba(214, 199, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+.composer__mic:hover:not(:disabled) { background: rgba(164, 115, 255, 0.2); transform: scale(1.04); }
+.composer__mic:active:not(:disabled) { transform: scale(0.95); }
+.composer__mic--active {
+  color: white;
+  border-color: rgba(255, 157, 203, 0.68);
+  background: rgba(177, 71, 150, 0.55);
+  box-shadow: 0 0 0 5px rgba(220, 93, 177, 0.12), 0 0 18px rgba(220, 93, 177, 0.38);
+  animation: pulse-opacity 1.2s ease-in-out infinite;
+}
+
 .composer__meta {
   @apply flex gap-1.5 text-[0.6rem] leading-[1.2] text-right pointer-events-none;
   color: rgba(230, 222, 255, 0.64);
@@ -414,6 +462,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
     "spotlight vote"
     "transcript vote";
 }
+.audience-room--entrance .audience-header { animation: audience-entrance 520ms cubic-bezier(.23, 1, .32, 1) both; }
+.audience-room--entrance .audience-spotlight { animation: audience-entrance 620ms 90ms cubic-bezier(.23, 1, .32, 1) both; }
+.audience-room--entrance .vote-panel { animation: audience-entrance 620ms 150ms cubic-bezier(.23, 1, .32, 1) both; }
+.audience-room--entrance .audience-transcript { animation: audience-entrance 620ms 210ms cubic-bezier(.23, 1, .32, 1) both; }
 .audience-header { grid-area: header; min-height: 72px; margin: 0; }
 .audience-header h1 { font-size: clamp(2.4rem, 5vw, 4.2rem); line-height: 0.95; }
 .audience-viewers {
@@ -421,6 +473,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   border: 1px solid var(--line);
   background: rgba(20, 15, 43, 0.54);
 }
+.audience-viewers__label { animation: count-pop 260ms ease-out both; }
 .audience-spotlight {
   grid-area: spotlight;
   @apply flex items-center gap-[22px] overflow-hidden min-h-[150px] m-0 rounded-[27px];
@@ -473,6 +526,32 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   animation: typing-dot 900ms ease-in-out infinite;
 }
 .audience-typing__dots i:nth-child(2) { animation-delay: 120ms; }
+.audience-reactions {
+  @apply flex flex-wrap items-center justify-between gap-2 border-t px-5 py-3;
+  border-color: var(--line);
+  background: rgba(8, 6, 22, 0.4);
+}
+.audience-reactions__label {
+  @apply text-[0.68rem] font-[720] tracking-[0.06em] uppercase;
+  color: rgba(225, 216, 255, 0.58);
+}
+.audience-reactions__buttons { @apply flex flex-wrap items-center gap-1.5; }
+.audience-reaction-button {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[0.69rem] font-[720] transition-all duration-150;
+  color: rgba(244, 236, 255, 0.82);
+  border: 1px solid rgba(213, 190, 255, 0.2);
+  background: rgba(145, 96, 232, 0.13);
+}
+.audience-reaction-button:hover:not(:disabled) {
+  color: white;
+  border-color: rgba(222, 199, 255, 0.58);
+  background: rgba(145, 96, 232, 0.28);
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 8px 20px rgba(105, 63, 211, 0.2);
+}
+.audience-reaction-button:active:not(:disabled) { transform: scale(0.96); }
+.audience-reaction-button:disabled { cursor: wait; opacity: 0.55; }
+
 .audience-typing__dots i:nth-child(3) { animation-delay: 240ms; }
 .audience-reaction {
   @apply pointer-events-none fixed inset-0 z-30 grid place-items-center;
@@ -608,6 +687,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse-opacity { 50% { opacity: 0.38; } }
 @keyframes typing-dot { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+@keyframes count-pop { from { opacity: 0.35; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes audience-entrance { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes avatar-performance { 0% { transform: scale(1) rotate(0); } 32% { transform: scale(1.05) rotate(-2deg); } 64% { transform: scale(1.02) rotate(2deg); } 100% { transform: scale(1) rotate(0); } }
 @keyframes voice-status-pulse { 0%, 100% { opacity: 0.72; } 50% { opacity: 1; } }
 @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(200, 170, 255, 0.48); } 68%, 100% { box-shadow: 0 0 0 8px rgba(200, 170, 255, 0); } }
 @keyframes vote-pop { 50% { transform: translateX(3px) scale(1.017); } }
@@ -695,7 +777,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .assistant-typing, .assistant-typing__spark, .assistant-typing__dots i, .composer__thinking { animation: none; }
+  .assistant-typing, .assistant-typing__spark, .assistant-typing__dots i, .composer__thinking, .rina-avatar--performing, .audience-room--entrance .audience-header, .audience-room--entrance .audience-spotlight, .audience-room--entrance .vote-panel, .audience-room--entrance .audience-transcript { animation: none; }
+
+  .rina-avatar--listening { transform: none; }
+  .audience-viewers__label { animation: none; }
 
   .persona-header__voice-status,
   .rina-avatar--speaking,

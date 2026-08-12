@@ -266,7 +266,7 @@ export function ChatExperience() {
       if (event.type === "vote-tally" || event.type === "persona-reaction") {
         dispatch({ type: "set-mood", mood: "surprised" });
       }
-      const roomMessage = event.message;
+      const roomMessage = "message" in event ? event.message : undefined;
       if (roomMessage && roomMessage.role === "assistant") {
         setMessages((current) => {
           if (current.some((message) => messageText(message) === roomMessage.content)) {

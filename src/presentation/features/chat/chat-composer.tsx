@@ -1,8 +1,9 @@
-import { Send, Square } from "lucide-react";
-import { type FormEvent, useRef } from "react";
+import { Mic, MicOff, Send, Square } from "lucide-react";
+import { type FormEvent, useCallback, useRef } from "react";
 
 import { COMPANIONS, type CompanionId } from "@/features/persona";
 import { APP_CONFIG } from "@/lib/config/app";
+import { useVoiceInput } from "@/presentation/hooks/use-voice-input";
 
 interface ChatComposerProps {
   companionId: CompanionId;
@@ -27,6 +28,21 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const companion = COMPANIONS[companionId];
+  const handleFinalTranscript = useCallback(
+    (transcript: string) => {
+      const nextDraft = `${draft.trim()} ${transcript}`.trim();
+      if (nextDraft.length <= APP_CONFIG.maxMessageCharacters) onDraftChange(nextDraft);
+    },
+    [draft, onDraftChange],
+  );
+  const {
+    error: voiceInputError,
+    interimTranscript,
+    isListening,
+    isSupported: isVoiceInputSupported,
+    startListening,
+    stopListening,
+  } = useVoiceInput({ onFinalTranscript: handleFinalTranscript });
 
   const resizeComposer = (textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
@@ -54,6 +70,12 @@ export function ChatComposer({
             )}
           </div>
         </div>
+        {interimTranscript ? (
+          <div className="composer__voice-preview" role="status" aria-live="polite">
+            <span className="presence-pulse" aria-hidden="true" />
+            {interimTranscript}
+          </div>
+        ) : null}
         <textarea
           ref={composerRef}
           id="message-input"
@@ -75,7 +97,25 @@ export function ChatComposer({
           }}
           placeholder={`Write something honest to ${companion.name}...`}
           rows={1}
+          aria-describedby={voiceInputError ? "voice-input-error" : undefined}
         />
+        {voiceInputError ? (
+          <div id="voice-input-error" className="composer__voice-error" role="alert">
+            {voiceInputError}
+          </div>
+        ) : null}
+        {isVoiceInputSupported ? (
+          <button
+            className={`composer__mic ${isListening ? "composer__mic--active" : ""}`}
+            type="button"
+            onClick={() => (isListening ? stopListening() : startListening())}
+            disabled={isStreaming || isLoading}
+            aria-label={isListening ? "Stop voice input" : "Start voice input"}
+            title={isListening ? "Stop voice input" : "Talk to your companion"}
+          >
+            {isListening ? <MicOff aria-hidden="true" size={16} /> : <Mic aria-hidden="true" size={16} />}
+          </button>
+        ) : null}
       </div>
 
       {isStreaming ? (

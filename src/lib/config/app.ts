@@ -21,3 +21,11 @@ export const VOTE_OPTIONS = [
 ] as const;
 
 export type VoteOption = (typeof VOTE_OPTIONS)[number]["value"];
+
+export const AUDIENCE_REACTIONS = [
+  { value: "heart", label: "Love it", emoji: "♥" },
+  { value: "fire", label: "Fire", emoji: "🔥" },
+  { value: "laugh", label: "Made me laugh", emoji: "😂" },
+] as const;
+
+export type AudienceReaction = (typeof AUDIENCE_REACTIONS)[number]["value"];

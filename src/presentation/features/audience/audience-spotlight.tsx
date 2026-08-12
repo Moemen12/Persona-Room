@@ -6,15 +6,28 @@ import { RinaAvatar } from "@/presentation/components/rina-avatar";
 interface AudienceSpotlightProps {
   companionId: CompanionId;
   mood: PersonaMood;
+  isPerforming?: boolean;
+  isListening?: boolean;
 }
 
-export function AudienceSpotlight({ companionId, mood }: AudienceSpotlightProps) {
+export function AudienceSpotlight({
+  companionId,
+  mood,
+  isPerforming = false,
+  isListening = false,
+}: AudienceSpotlightProps) {
   const companion = COMPANIONS[companionId];
 
   return (
     <section className="audience-spotlight">
       <div className="audience-spotlight__avatar">
-        <RinaAvatar companionId={companionId} mood={mood} size="room" />
+          <RinaAvatar
+            companionId={companionId}
+            mood={mood}
+            size="room"
+            isPerforming={isPerforming}
+            isListening={isListening}
+          />
       </div>
       <div className="audience-spotlight__copy">
         <div className="live-chip">
@@ -22,7 +35,7 @@ export function AudienceSpotlight({ companionId, mood }: AudienceSpotlightProps)
           <span>INTERACTIVE</span>
         </div>
         <p>Vote on what {companion.name} does next and watch the room react in real time.</p>
-        <span>Connected to {companion.name}&apos;s private feed</span>
+        <span>{isPerforming ? `${companion.name} is reacting to the room` : isListening ? `${companion.name} is listening closely` : `Connected to ${companion.name}'s private feed`}</span>
       </div>
       <div className="audience-spotlight__mood" role="status">
         <Heart aria-hidden="true" size={14} />

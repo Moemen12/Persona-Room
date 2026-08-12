@@ -1,8 +1,6 @@
-import { getRoomSnapshot } from "@/features/audience";
-import { AudienceHeader } from "./audience-header";
-import { AudienceSpotlight } from "./audience-spotlight";
-import { AudienceTranscript } from "./audience-transcript";
-import { VotePanel } from "./vote-panel";
+import { getRoomSnapshot } from "@/features/audience/audience.service";
+
+import { AudienceRoomLive } from "./audience-room-live";
 
 interface AudienceExperienceProps {
   roomId: string;
@@ -10,27 +8,5 @@ interface AudienceExperienceProps {
 
 export async function AudienceExperience({ roomId }: AudienceExperienceProps) {
   const snapshot = await getRoomSnapshot(roomId);
-
-  return (
-    <main className="audience-shell stage-enter">
-      <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
-      <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
-      <div className="stage-sweep" aria-hidden="true" />
-      <div className="stage-sparkle stage-sparkle--one" aria-hidden="true" />
-      <div className="stage-sparkle stage-sparkle--two" aria-hidden="true" />
-
-      <div className="audience-room">
-        <AudienceHeader companionId={snapshot.companionId} viewerCount={1} />
-        <AudienceSpotlight companionId={snapshot.companionId} mood="neutral" />
-        <VotePanel
-          roomId={roomId}
-          companionId={snapshot.companionId}
-          initialTally={snapshot.tally}
-        />
-        <div className="audience-layout">
-          <AudienceTranscript initialSnapshot={snapshot} roomId={roomId} />
-        </div>
-      </div>
-    </main>
-  );
+  return <AudienceRoomLive roomId={roomId} initialSnapshot={snapshot} />;
 }

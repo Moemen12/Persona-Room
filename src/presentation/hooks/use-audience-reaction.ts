@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 interface AudienceReaction {
   id: number;
-  kind: "vote" | "surprise" | "welcome";
+  kind: "vote" | "surprise" | "welcome" | "heart" | "fire" | "laugh";
   label: string;
 }
 

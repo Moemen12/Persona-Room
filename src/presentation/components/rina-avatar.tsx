@@ -16,6 +16,8 @@ interface RinaAvatarProps {
   size?: "hero" | "room" | "message";
   className?: string;
   isSpeaking?: boolean;
+  isListening?: boolean;
+  isPerforming?: boolean;
 }
 
 export function RinaAvatar({
@@ -24,6 +26,8 @@ export function RinaAvatar({
   size = "hero",
   className,
   isSpeaking = false,
+  isListening = false,
+  isPerforming = false,
 }: RinaAvatarProps) {
   const companion = COMPANIONS[companionId];
   return (
@@ -32,9 +36,11 @@ export function RinaAvatar({
         "rina-avatar",
         `rina-avatar--${size}`,
         isSpeaking && "rina-avatar--speaking",
+        isListening && "rina-avatar--listening",
+        isPerforming && "rina-avatar--performing",
         className,
       )}
-      aria-label={`${companion.name} is feeling ${mood}${isSpeaking ? " and speaking" : ""}`}
+      aria-label={`${companion.name} is feeling ${mood}${isSpeaking ? " and speaking" : isListening ? " and listening" : ""}`}
     >
       <div className="rina-avatar__glow" />
       {Object.entries(expressionFile).map(([expression, file]) => (

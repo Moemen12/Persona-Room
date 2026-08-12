@@ -2,7 +2,7 @@ import { Ratelimit } from "@upstash/ratelimit";
 
 import { getInternalUserForSession } from "@/features/auth/auth.service";
 import { voteReaction } from "@/features/persona/persona.service";
-import { APP_CONFIG, VOTE_OPTIONS, type VoteOption } from "@/lib/config/app";
+import { APP_CONFIG, type AudienceReaction, VOTE_OPTIONS, type VoteOption } from "@/lib/config/app";
 import { NotFoundError, RateLimitError } from "@/lib/errors";
 import { getRedisClient, withRedisFallback } from "@/infrastructure/redis/client";
 import { getSupabaseAdminClient } from "@/infrastructure/supabase/server";
@@ -82,6 +82,20 @@ export async function getRoomSnapshot(
     messages,
     tally: await getVoteTally(sessionId, dependencies),
   };
+}
+
+export async function publishAudienceReaction(
+  sessionId: string,
+  reaction: AudienceReaction,
+) {
+  const { session } = await getInternalUserForSession(sessionId);
+  if (!session.audienceEnabled) throw new NotFoundError("Room");
+
+  await broadcastRoomEvent(sessionId, {
+    type: "audience-reaction",
+    reaction,
+    reactionId: crypto.randomUUID(),
+  });
 }
 
 export async function submitVote(
