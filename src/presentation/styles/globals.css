@@ -557,12 +557,27 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   @apply pointer-events-none fixed inset-0 z-30 grid place-items-center;
 }
 .audience-reaction__toast {
-  @apply inline-flex items-center gap-2 rounded-full px-4 py-2 text-[0.76rem] font-[760];
-  color: #fff;
-  border: 1px solid rgba(229, 211, 255, 0.36);
-  background: linear-gradient(135deg, rgba(112, 67, 206, 0.92), rgba(34, 21, 79, 0.94));
-  box-shadow: 0 18px 60px rgba(66, 25, 153, 0.4);
-  animation: reaction-toast 2400ms cubic-bezier(.23, 1, .32, 1) both;
+  @apply inline-flex items-center gap-2.5 rounded-2xl px-6 py-3.5 text-[0.96rem] font-[850] tracking-[-0.01em];
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: rgba(18, 10, 38, 0.94);
+  box-shadow: 0 20px 50px rgba(130, 60, 255, 0.6), 0 0 35px rgba(255, 92, 243, 0.45);
+  animation: reaction-pop 2.4s cubic-bezier(.23, 1, .32, 1) forwards;
+}
+.audience-reaction__toast--fire {
+  border-color: rgba(255, 170, 0, 0.6);
+  background: linear-gradient(135deg, rgba(60, 15, 10, 0.95), rgba(20, 10, 25, 0.95));
+  box-shadow: 0 20px 50px rgba(255, 100, 0, 0.55), 0 0 35px rgba(255, 200, 0, 0.5);
+}
+.audience-reaction__toast--laugh {
+  border-color: rgba(0, 242, 254, 0.6);
+  background: linear-gradient(135deg, rgba(10, 45, 60, 0.95), rgba(20, 10, 35, 0.95));
+  box-shadow: 0 20px 50px rgba(0, 200, 254, 0.55), 0 0 35px rgba(0, 242, 254, 0.5);
+}
+.audience-reaction__toast--heart {
+  border-color: rgba(255, 92, 243, 0.6);
+  background: linear-gradient(135deg, rgba(60, 10, 45, 0.95), rgba(20, 10, 30, 0.95));
+  box-shadow: 0 20px 50px rgba(255, 92, 243, 0.55), 0 0 35px rgba(255, 92, 243, 0.5);
 }
 .audience-reaction__icon { @apply inline-flex text-[#ffe3a3]; }
 .audience-reaction__confetti { @apply absolute inset-1/2; }

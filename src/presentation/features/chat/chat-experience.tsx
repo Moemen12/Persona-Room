@@ -16,6 +16,9 @@ import { useCompanionVoice } from "@/presentation/hooks/use-companion-voice";
 import { useChatProactivity } from "@/presentation/hooks/use-chat-proactivity";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
+import { AUDIENCE_REACTIONS } from "@/lib/config/app";
+import { AudienceReactionOverlay } from "@/presentation/features/audience/audience-reaction-overlay";
+import { useAudienceReaction } from "@/presentation/hooks/use-audience-reaction";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
 import { formatChatError } from "@/presentation/lib/chat-error";
 
@@ -181,6 +184,7 @@ function messageText(message: UIMessage) {
 
 export function ChatExperience() {
   const [state, dispatch] = useReducer(chatClientReducer, initialChatState);
+  const { reaction, triggerReaction } = useAudienceReaction();
   const { play } = useInterfaceSound();
   const companionId = state.identity?.bootstrap.session.companionId ?? state.hintedCompanionId ?? "rina";
   const {
@@ -263,6 +267,14 @@ export function ChatExperience() {
     onViewerCount: (count) => dispatch({ type: "set-viewer-count", count }),
     onEvent: (event: RoomBroadcast) => {
       if (event.type === "companion-changed") return;
+      if (event.type === "audience-reaction") {
+        const definition = AUDIENCE_REACTIONS.find((item) => item.value === event.reaction);
+        triggerReaction({
+          kind: event.reaction,
+          label: definition ? `${definition.emoji} ${definition.label}` : "The room reacted",
+        });
+        return;
+      }
       if (event.type === "vote-tally" || event.type === "persona-reaction") {
         dispatch({ type: "set-mood", mood: "surprised" });
       }
@@ -397,6 +409,7 @@ export function ChatExperience() {
 
   return (
     <main className="persona-shell stage-enter">
+      <AudienceReactionOverlay reaction={reaction} />
       <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
       <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
       <div className="stage-sweep" aria-hidden="true" />

@@ -11,7 +11,7 @@ interface AudienceReactionOverlayProps {
   };
 }
 
-const CONFETTI_COLORS = ["#f5b7ff", "#bca1ff", "#ffd88f", "#8ef0db", "#ffffff"];
+const CONFETTI_COLORS = ["#ff5cf3", "#38ef7d", "#ffcc00", "#00f2fe", "#ffffff", "#ff4b2b"];
 
 export function AudienceReactionOverlay({ reaction }: AudienceReactionOverlayProps) {
   if (!reaction) return null;
@@ -27,11 +27,20 @@ export function AudienceReactionOverlay({ reaction }: AudienceReactionOverlayPro
             ? Laugh
             : Heart;
 
+  const variantClass =
+    reaction.kind === "fire"
+      ? "audience-reaction__toast--fire"
+      : reaction.kind === "laugh"
+        ? "audience-reaction__toast--laugh"
+        : reaction.kind === "heart"
+          ? "audience-reaction__toast--heart"
+          : "audience-reaction__toast--default";
+
   return (
     <div className="audience-reaction" key={reaction.id} aria-live="polite">
-      <div className="audience-reaction__toast">
+      <div className={`audience-reaction__toast ${variantClass}`}>
         <span className="audience-reaction__icon" aria-hidden="true">
-          <Icon size={15} />
+          <Icon size={17} />
         </span>
         <span>{reaction.label}</span>
       </div>
