@@ -33,6 +33,21 @@ interface IdentityState {
   accessToken: string;
 }
 
+async function postSessionBootstrap(accessToken: string, signal: AbortSignal) {
+  return fetch(appRoutes.api.session, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}` },
+    signal,
+  });
+}
+
+async function readResponseError(response: Response) {
+  const payload = (await response.json().catch(() => undefined)) as
+    | { error?: { message?: string } }
+    | undefined;
+  return payload?.error?.message ?? `Session setup failed (${response.status}).`;
+}
+
 interface NarrationState {
   assistantId?: string;
   started: boolean;
@@ -222,19 +237,31 @@ export function ChatExperience() {
       try {
         const supabase = getSupabaseBrowserClient();
         const initialSession = await supabase.auth.getSession();
-        const session =
-          initialSession.data.session ??
-          (await supabase.auth.signInAnonymously()).data.session;
+        let session = initialSession.data.session;
+        if (!session) {
+          const anonymous = await supabase.auth.signInAnonymously();
+          if (anonymous.error) throw anonymous.error;
+          session = anonymous.data.session;
+        }
         if (!session || controller.signal.aborted) {
           throw new Error("Anonymous session unavailable");
         }
 
-        const response = await fetch(appRoutes.api.session, {
-          method: "POST",
-          headers: { authorization: `Bearer ${session.access_token}` },
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("Session setup failed");
+        let response = await postSessionBootstrap(session.access_token, controller.signal);
+        if (response.status === 401) {
+          const refreshed = await supabase.auth.refreshSession();
+          if (refreshed.data.session && !refreshed.error) {
+            session = refreshed.data.session;
+          } else {
+            await supabase.auth.signOut({ scope: "local" });
+            const anonymous = await supabase.auth.signInAnonymously();
+            if (anonymous.error) throw anonymous.error;
+            session = anonymous.data.session;
+          }
+          if (!session) throw new Error("Anonymous session unavailable");
+          response = await postSessionBootstrap(session.access_token, controller.signal);
+        }
+        if (!response.ok) throw new Error(await readResponseError(response));
         const jsonResult = (await response.json()) as { data: SessionBootstrap };
         const bootstrap = jsonResult.data;
         if (controller.signal.aborted) return;
@@ -250,10 +277,13 @@ export function ChatExperience() {
         setMessages(bootstrap.messages.map(asUiMessage));
       } catch (initializationError) {
         if (!controller.signal.aborted) {
-          dispatch({
-            type: "set-setup-error",
-            error: "The room needs its Supabase settings before it can remember you.",
-          });
+            dispatch({
+              type: "set-setup-error",
+              error:
+                initializationError instanceof Error
+                  ? initializationError.message
+                  : "The room could not establish a secure session. Refresh and try again.",
+            });
           console.error(initializationError);
         }
       }

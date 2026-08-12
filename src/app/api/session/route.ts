@@ -4,7 +4,7 @@ import { broadcastRoomEvent } from "@/features/audience/audience.service";
 import { getSessionBootstrap, updateSessionCompanion } from "@/features/auth/auth.service";
 import { COMPANION_IDS } from "@/features/persona/persona.types";
 import { getSupabaseAuthUser } from "@/infrastructure/supabase/server";
-import { MethodNotAllowedError } from "@/lib/errors";
+import { AuthenticationError, MethodNotAllowedError } from "@/lib/errors";
 import { createErrorResponse, createSuccessResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ function getAccessToken(request: Request) {
 export async function POST(request: Request) {
   try {
     const accessToken = getAccessToken(request);
-    if (!accessToken) return new Response(null, { status: 401 });
+    if (!accessToken) return createErrorResponse(new AuthenticationError());
     const authUser = await getSupabaseAuthUser(accessToken);
     const bootstrap = await getSessionBootstrap(authUser.id);
     return createSuccessResponse(bootstrap);
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const accessToken = getAccessToken(request);
-    if (!accessToken) return new Response(null, { status: 401 });
+    if (!accessToken) return createErrorResponse(new AuthenticationError());
     const input = companionUpdateSchema.parse(await request.json());
     const authUser = await getSupabaseAuthUser(accessToken);
     const session = await updateSessionCompanion(input.sessionId, authUser.id, input.companionId);
