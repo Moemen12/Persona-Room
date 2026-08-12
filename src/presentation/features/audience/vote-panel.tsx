@@ -13,10 +13,15 @@ interface VotePanelProps {
   roomId: string;
   companionId: CompanionId;
   initialTally: VoteTally;
-  fingerprint: string;
 }
 
-export function VotePanel({ roomId, companionId, initialTally, fingerprint }: VotePanelProps) {
+function createVoterToken() {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  return `persona-room-voter-${randomUuid ?? Math.random().toString(36).slice(2)}`;
+}
+
+export function VotePanel({ roomId, companionId, initialTally }: VotePanelProps) {
+  const [voterToken] = useState(createVoterToken);
   const companion = COMPANIONS[companionId];
   const { play } = useInterfaceSound();
   const [submittingOption, setSubmittingOption] = useState<VoteOption>();
@@ -43,7 +48,7 @@ export function VotePanel({ roomId, companionId, initialTally, fingerprint }: Vo
       setOptimisticTally(option);
 
       try {
-        const result = await submitVoteAction(roomId, option, fingerprint);
+        const result = await submitVoteAction(roomId, option, voterToken);
         if (!result.success) {
           setErrorMessage(result.error);
         }

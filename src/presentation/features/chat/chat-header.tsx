@@ -9,6 +9,7 @@ import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 interface ChatHeaderProps {
   sessionId?: string;
   isVoiceSupported: boolean;
+  isVoicePreparing: boolean;
   voiceEnabled: boolean;
   onToggleVoice: () => void;
 }
@@ -16,6 +17,7 @@ interface ChatHeaderProps {
 export function ChatHeader({
   sessionId,
   isVoiceSupported,
+  isVoicePreparing,
   voiceEnabled,
   onToggleVoice,
 }: ChatHeaderProps) {
@@ -62,12 +64,20 @@ export function ChatHeader({
           aria-pressed={voiceEnabled}
           aria-label={
             !isVoiceSupported
-              ? "Browser voice is unavailable"
-              : voiceEnabled
-                ? "Mute Rina's voice"
-                : "Enable Rina's voice"
+              ? "Neural voice is unavailable"
+              : isVoicePreparing
+                ? "Preparing local neural voice"
+                : voiceEnabled
+                  ? "Mute companion voice"
+                  : "Enable companion voice"
           }
-          title={!isVoiceSupported ? "Browser voice unavailable" : undefined}
+          title={
+            !isVoiceSupported
+              ? "Neural voice unavailable"
+              : isVoicePreparing
+                ? "Preparing local neural voice"
+                : "Free local neural voice"
+          }
         >
           {voiceEnabled ? <Mic2 aria-hidden="true" size={16} /> : <VolumeX aria-hidden="true" size={16} />}
         </button>

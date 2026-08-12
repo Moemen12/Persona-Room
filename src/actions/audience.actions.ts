@@ -5,9 +5,9 @@ import { revalidatePath } from "next/cache";
 import { submitVote } from "@/features/audience/audience.service";
 import type { VoteOption } from "@/lib/config/app";
 
-export async function submitVoteAction(sessionId: string, option: VoteOption, fingerprint: string) {
+export async function submitVoteAction(sessionId: string, option: VoteOption, voterToken: string) {
   try {
-    const tally = await submitVote(sessionId, option, fingerprint);
+    const tally = await submitVote(sessionId, option, voterToken);
     revalidatePath(`/room/${sessionId}`);
     return { success: true, tally };
   } catch (error) {

@@ -42,11 +42,11 @@ export async function findVoteTally(sessionId: string): Promise<Record<string, n
   return tally;
 }
 
-export async function insertVote(sessionId: string, option: VoteOption, fingerprint: string): Promise<void> {
+export async function insertVote(sessionId: string, option: VoteOption, voterToken: string): Promise<void> {
   const client = getSupabaseAdminClient();
   const { error } = await client
     .from("votes")
-    .insert({ session_id: sessionId, option, voter_fingerprint: fingerprint });
+    .insert({ session_id: sessionId, option, voter_fingerprint: voterToken });
   if (error) throw error;
 }
 

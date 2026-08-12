@@ -128,9 +128,10 @@ export function ChatExperience() {
   const { play } = useInterfaceSound();
   const companionId = state.identity?.bootstrap.session.companionId ?? state.hintedCompanionId ?? "rina";
   const {
-    isSupported: isVoiceSupported,
+    isSupported:     isVoiceSupported,
     voiceEnabled,
     isSpeaking,
+    isPreparing: isVoicePreparing,
     setVoiceEnabled,
     speak,
     stopSpeaking,
@@ -335,6 +336,7 @@ export function ChatExperience() {
         <ChatHeader
           sessionId={state.identity?.bootstrap.session.id}
           isVoiceSupported={isVoiceSupported}
+          isVoicePreparing={isVoicePreparing}
           voiceEnabled={voiceEnabled}
           onToggleVoice={() => setVoiceEnabled(!voiceEnabled)}
         />

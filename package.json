@@ -27,6 +27,7 @@
     "ai": "^5.0.0",
     "clsx": "^2.1.1",
     "edge-tts-universal": "^1.4.0",
+    "kokoro-js": "^1.2.1",
     "lucide-react": "^0.511.0",
     "next": "^16.2.4",
     "react": "^19.2.3",

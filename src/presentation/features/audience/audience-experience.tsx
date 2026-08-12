@@ -26,7 +26,6 @@ export async function AudienceExperience({ roomId }: AudienceExperienceProps) {
           roomId={roomId}
           companionId={snapshot.companionId}
           initialTally={snapshot.tally}
-          fingerprint="server-rsc"
         />
         <div className="audience-layout">
           <AudienceTranscript initialSnapshot={snapshot} roomId={roomId} />

@@ -87,7 +87,7 @@ export async function getRoomSnapshot(
 export async function submitVote(
   sessionId: string,
   option: VoteOption,
-  fingerprint: string,
+  voterToken: string,
   dependencies: AudienceServiceDependencies = defaultDependencies,
 ) {
   const { session, user } = await getInternalUserForSession(sessionId);
@@ -101,14 +101,14 @@ export async function submitVote(
         limiter: Ratelimit.slidingWindow(1, `${APP_CONFIG.voteRateLimitSeconds} s`),
         prefix: "persona-room:vote",
       });
-      const result = await limiter.limit(`${sessionId}:${fingerprint}`);
+      const result = await limiter.limit(`${sessionId}:${voterToken}`);
       if (!result.success) throw new RateLimitError();
       return undefined;
     },
     async () => undefined,
   );
 
-  await dependencies.insertVote(sessionId, option, fingerprint);
+  await dependencies.insertVote(sessionId, option, voterToken);
 
   const tally = await withRedisFallback(
     async () => {
