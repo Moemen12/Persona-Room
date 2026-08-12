@@ -7,9 +7,9 @@ import { useTranscriptAutoScroll } from "@/presentation/hooks/use-transcript-aut
 
 interface NarrationSnapshot {
   assistantId?: string;
-  visibleText: string;
   started: boolean;
   completed: boolean;
+  waiting: boolean;
 }
 
 interface ChatTranscriptProps {
@@ -47,6 +47,7 @@ export function ChatTranscript({
 }: ChatTranscriptProps) {
   const companion = COMPANIONS[companionId];
   const latestMessage = messages.at(-1);
+  const previousMessage = messages.at(-2);
   const latestMessageText = latestMessage ? messageText(latestMessage) : "";
   const messageListRef = useTranscriptAutoScroll({
     messageCount: messages.length,
@@ -84,13 +85,12 @@ export function ChatTranscript({
               voiceSyncEnabled &&
               isAssistant &&
               isLatestMessage &&
-              narration.assistantId === message.id &&
+              previousMessage?.role === "user" &&
+              narration.waiting &&
               !narration.completed;
-            const content = isVoiceGated
-              ? narration.assistantId === message.id
-                ? narration.visibleText
-                : ""
-              : rawContent;
+            const hasStartedPlayback =
+              narration.started && narration.assistantId === message.id;
+            const content = isVoiceGated && !hasStartedPlayback ? "" : rawContent;
             const bubbleRole = isAssistant ? "assistant" : "user";
             const bubbleIsStreaming =
               isLatestMessage &&
@@ -103,6 +103,7 @@ export function ChatTranscript({
                 role={bubbleRole}
                 text={content}
                 assistantName={companion.name}
+                animateText={isVoiceGated && narration.started && !narration.completed}
                 isStreaming={bubbleIsStreaming}
               />
             );

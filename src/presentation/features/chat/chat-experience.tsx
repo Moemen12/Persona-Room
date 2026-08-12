@@ -31,9 +31,9 @@ interface IdentityState {
 
 interface NarrationState {
   assistantId?: string;
-  visibleText: string;
   started: boolean;
   completed: boolean;
+  waiting: boolean;
 }
 
 interface ChatClientState {
@@ -56,8 +56,9 @@ type ChatClientAction =
   | { type: "set-viewer-count"; count: number }
   | { type: "set-selector-open"; open: boolean }
   | { type: "set-changing-companion"; changing: boolean }
+  | { type: "assistant-response-pending" }
   | { type: "assistant-response-started"; assistantId: string }
-  | { type: "assistant-segment-playback-started"; assistantId: string; segment: string }
+  | { type: "assistant-playback-started"; assistantId: string }
   | { type: "assistant-narration-completed"; assistantId: string }
   | { type: "companion-updated"; bootstrap: SessionBootstrap; mood: PersonaMood };
 
@@ -88,33 +89,31 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
       return { ...state, isSelectorOpen: action.open };
     case "set-changing-companion":
       return { ...state, isChangingCompanion: action.changing };
+    case "assistant-response-pending":
+      return {
+        ...state,
+        narration: { started: false, completed: false, waiting: true },
+      };
     case "assistant-response-started":
       return {
         ...state,
         narration: {
           assistantId: action.assistantId,
-          visibleText: "",
           started: false,
           completed: false,
+          waiting: true,
         },
       };
-    case "assistant-segment-playback-started": {
-      const isNewAssistant = state.narration.assistantId !== action.assistantId;
-      return {
-        ...state,
-        narration: {
-          assistantId: action.assistantId,
-          visibleText: isNewAssistant
-            ? action.segment
-            : `${state.narration.visibleText} ${action.segment}`.trim(),
-          started: true,
-          completed: false,
-        },
-      };
-    }
+    case "assistant-playback-started":
+      return state.narration.assistantId === action.assistantId
+        ? { ...state, narration: { ...state.narration, started: true, waiting: true } }
+        : state;
     case "assistant-narration-completed":
       return state.narration.assistantId === action.assistantId
-        ? { ...state, narration: { ...state.narration, completed: true } }
+        ? {
+            ...state,
+            narration: { ...state.narration, completed: true, waiting: false },
+          }
         : state;
     case "companion-updated":
       return {
@@ -132,9 +131,9 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
 }
 
 const emptyNarrationState: NarrationState = {
-  visibleText: "",
   started: false,
   completed: false,
+  waiting: false,
 };
 
 const initialChatState: ChatClientState = {
@@ -338,6 +337,7 @@ export function ChatExperience() {
     if (!text || !state.identity || status !== "ready") return;
     play("send");
     dispatch({ type: "set-draft", draft: "" });
+    dispatch({ type: "assistant-response-pending" });
     clearError();
     await sendMessage({ text });
   };
@@ -355,9 +355,8 @@ export function ChatExperience() {
     (assistantId: string) => dispatch({ type: "assistant-response-started", assistantId }),
     [],
   );
-  const handleSegmentPlaybackStarted = useCallback(
-    (assistantId: string, segment: string) =>
-      dispatch({ type: "assistant-segment-playback-started", assistantId, segment }),
+  const handleAssistantPlaybackStarted = useCallback(
+    (assistantId: string) => dispatch({ type: "assistant-playback-started", assistantId }),
     [],
   );
   const handleNarrationCompleted = useCallback(
@@ -373,7 +372,7 @@ export function ChatExperience() {
     speak,
     stopSpeaking,
     onAssistantResponseStarted: handleAssistantResponseStarted,
-    onSegmentPlaybackStarted: handleSegmentPlaybackStarted,
+    onAssistantPlaybackStarted: handleAssistantPlaybackStarted,
     onNarrationCompleted: handleNarrationCompleted,
   });
 
@@ -434,7 +433,7 @@ export function ChatExperience() {
               mood={state.mood}
               proactiveHint={proactiveHint}
               narration={state.narration}
-              voiceSyncEnabled={voiceEnabled && isVoiceSupported}
+              voiceSyncEnabled={voiceEnabled && isVoiceSupported && !error}
             />
 
             {(error || state.setupError) && (
