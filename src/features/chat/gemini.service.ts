@@ -66,7 +66,7 @@ export async function streamRinaResponse(input: {
     contents: toGeminiContents(input.history, input.userText),
     config: {
       systemInstruction: input.systemInstruction,
-      temperature: 0.85,
+      temperature: 0.9,
       maxOutputTokens: 220,
     },
   });
