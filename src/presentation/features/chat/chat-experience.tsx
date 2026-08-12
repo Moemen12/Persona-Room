@@ -2,7 +2,7 @@
 
 import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { type FormEvent, useReducer, useState } from "react";
+import { type FormEvent, useCallback, useReducer, useState } from "react";
 
 import type { RoomBroadcast } from "@/features/audience";
 import type { SessionBootstrap } from "@/features/auth";
@@ -56,6 +56,7 @@ type ChatClientAction =
   | { type: "set-viewer-count"; count: number }
   | { type: "set-selector-open"; open: boolean }
   | { type: "set-changing-companion"; changing: boolean }
+  | { type: "assistant-response-started"; assistantId: string }
   | { type: "assistant-segment-playback-started"; assistantId: string; segment: string }
   | { type: "assistant-narration-completed"; assistantId: string }
   | { type: "companion-updated"; bootstrap: SessionBootstrap; mood: PersonaMood };
@@ -87,6 +88,16 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
       return { ...state, isSelectorOpen: action.open };
     case "set-changing-companion":
       return { ...state, isChangingCompanion: action.changing };
+    case "assistant-response-started":
+      return {
+        ...state,
+        narration: {
+          assistantId: action.assistantId,
+          visibleText: "",
+          started: false,
+          completed: false,
+        },
+      };
     case "assistant-segment-playback-started": {
       const isNewAssistant = state.narration.assistantId !== action.assistantId;
       return {
@@ -340,6 +351,20 @@ export function ChatExperience() {
     enabled: Boolean(state.identity),
   });
 
+  const handleAssistantResponseStarted = useCallback(
+    (assistantId: string) => dispatch({ type: "assistant-response-started", assistantId }),
+    [],
+  );
+  const handleSegmentPlaybackStarted = useCallback(
+    (assistantId: string, segment: string) =>
+      dispatch({ type: "assistant-segment-playback-started", assistantId, segment }),
+    [],
+  );
+  const handleNarrationCompleted = useCallback(
+    (assistantId: string) => dispatch({ type: "assistant-narration-completed", assistantId }),
+    [],
+  );
+
   useAutoSpeak({
     messages,
     isStreaming,
@@ -347,10 +372,9 @@ export function ChatExperience() {
     resetKey: companionId,
     speak,
     stopSpeaking,
-    onSegmentPlaybackStarted: (assistantId, segment) =>
-      dispatch({ type: "assistant-segment-playback-started", assistantId, segment }),
-    onNarrationCompleted: (assistantId) =>
-      dispatch({ type: "assistant-narration-completed", assistantId }),
+    onAssistantResponseStarted: handleAssistantResponseStarted,
+    onSegmentPlaybackStarted: handleSegmentPlaybackStarted,
+    onNarrationCompleted: handleNarrationCompleted,
   });
 
   if (isLoading && !state.setupError) {

@@ -84,6 +84,7 @@ export function ChatTranscript({
               voiceSyncEnabled &&
               isAssistant &&
               isLatestMessage &&
+              narration.assistantId === message.id &&
               !narration.completed;
             const content = isVoiceGated
               ? narration.assistantId === message.id
@@ -106,6 +107,19 @@ export function ChatTranscript({
               />
             );
           })}
+          {isStreaming && latestMessage?.role === "user" ? (
+            <div className="assistant-typing" role="status" aria-live="polite">
+              <span className="assistant-typing__spark" aria-hidden="true">
+                <Sparkles size={14} />
+              </span>
+              <span>{companion.name} is gathering a thought</span>
+              <span className="assistant-typing__dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            </div>
+          ) : null}
           {proactiveHint && !isStreaming ? (
             <div className="proactive-nudge" role="status">
               <span className="proactive-nudge__spark" aria-hidden="true"><Sparkles size={13} /></span>

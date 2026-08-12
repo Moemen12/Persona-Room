@@ -41,8 +41,17 @@ export function ChatComposer({
           <label htmlFor="message-input">Message {companion.name}</label>
           <div className="composer__meta">
             <span>{draft.length}/{APP_CONFIG.maxMessageCharacters}</span>
-            <span>Enter to send</span>
-            <span>Shift + Enter for a new line</span>
+            {isStreaming ? (
+              <span className="composer__thinking" role="status" aria-live="polite">
+                <span className="presence-pulse" aria-hidden="true" />
+                {companion.name} is thinking
+              </span>
+            ) : (
+              <>
+                <span>Enter to send</span>
+                <span>Shift + Enter for a new line</span>
+              </>
+            )}
           </div>
         </div>
         <textarea

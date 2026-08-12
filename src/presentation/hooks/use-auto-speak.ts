@@ -15,6 +15,7 @@ interface UseAutoSpeakOptions {
   resetKey?: string;
   speak: (text: string, options?: SpeakOptions) => Promise<void> | void;
   stopSpeaking?: () => void;
+  onAssistantResponseStarted?: (assistantId: string) => void;
   onSegmentPlaybackStarted?: (assistantId: string, segment: string) => void;
   onNarrationCompleted?: (assistantId: string) => void;
 }
@@ -66,6 +67,7 @@ export function useAutoSpeak({
   resetKey = "default",
   speak,
   stopSpeaking,
+  onAssistantResponseStarted,
   onSegmentPlaybackStarted,
   onNarrationCompleted,
 }: UseAutoSpeakOptions) {
@@ -78,6 +80,7 @@ export function useAutoSpeak({
   const speechLoopActiveRef = useRef(false);
   const speechGenerationRef = useRef(0);
   const pendingPlaybackCountRef = useRef(0);
+  const completedAssistantIdRef = useRef<string | undefined>(undefined);
   const previousResetKeyRef = useRef(resetKey);
   const previousEnabledRef = useRef(enabled);
   const isStreamingRef = useRef(isStreaming);
@@ -97,6 +100,7 @@ export function useAutoSpeak({
       pendingSpeechTextRef.current = "";
       speechQueueRef.current = [];
       pendingPlaybackCountRef.current = 0;
+      completedAssistantIdRef.current = undefined;
       speechGenerationRef.current += 1;
       stopSpeaking?.();
       return;
@@ -106,6 +110,7 @@ export function useAutoSpeak({
       speechQueueRef.current = [];
       pendingSpeechTextRef.current = "";
       pendingPlaybackCountRef.current = 0;
+      completedAssistantIdRef.current = undefined;
       speechGenerationRef.current += 1;
       stopSpeaking?.();
     }
@@ -127,9 +132,11 @@ export function useAutoSpeak({
       latestAssistant.id !== baselineAssistantIdRef.current
     ) {
       activeAssistantIdRef.current = latestAssistant.id;
+      onAssistantResponseStarted?.(latestAssistant.id);
       observedTextRef.current = "";
       pendingSpeechTextRef.current = "";
       pendingPlaybackCountRef.current = 0;
+      completedAssistantIdRef.current = undefined;
     }
 
     if (latestAssistant.id !== activeAssistantIdRef.current) return;
@@ -163,6 +170,11 @@ export function useAutoSpeak({
 
         pendingPlaybackCountRef.current += 1;
         let playbackSettled = false;
+        const reportNarrationCompleted = () => {
+          if (completedAssistantIdRef.current === assistantId) return;
+          completedAssistantIdRef.current = assistantId;
+          onNarrationCompleted?.(assistantId);
+        };
         const settlePlayback = () => {
           if (playbackSettled || generation !== speechGenerationRef.current) return;
           playbackSettled = true;
@@ -175,7 +187,7 @@ export function useAutoSpeak({
             pendingPlaybackCountRef.current === 0 &&
             speechQueueRef.current.length === 0
           ) {
-            onNarrationCompleted?.(assistantId);
+            reportNarrationCompleted();
           }
         };
 
@@ -191,18 +203,24 @@ export function useAutoSpeak({
       }
     } finally {
       speechLoopActiveRef.current = false;
+      const assistantId = activeAssistantIdRef.current;
       if (
+        assistantId &&
         !isStreamingRef.current &&
         pendingPlaybackCountRef.current === 0 &&
         speechQueueRef.current.length === 0
       ) {
-        onNarrationCompleted?.(activeAssistantIdRef.current ?? "");
+        if (completedAssistantIdRef.current !== assistantId) {
+          completedAssistantIdRef.current = assistantId;
+          onNarrationCompleted?.(assistantId);
+        }
       }
     }
   }, [
     enabled,
     isStreaming,
     messages,
+    onAssistantResponseStarted,
     onNarrationCompleted,
     onSegmentPlaybackStarted,
     resetKey,

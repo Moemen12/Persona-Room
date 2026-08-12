@@ -34,7 +34,7 @@ Favor intentional, premium, accessible UI over generic SaaS boilerplate. The pro
 
 Do not call `useEffect` directly in normal component code. Prefer derived render state, event handlers, server patterns, and remount semantics. Mount-only synchronization is permitted only for genuine external synchronization such as a browser subscription or third-party lifecycle; use a small named helper with cleanup when repeated. For async client synchronization, use `AbortController` cleanup and never commit results after the signal is aborted.
 
-Use declarative React patterns. When related client-state fields represent one interaction flow, prefer a reducer or one structured state object rather than many loosely coordinated state setters.
+Use declarative React patterns. When related client-state fields represent one interaction flow, prefer a reducer or one structured state object rather than many loosely coordinated state setters. Use stable `useCallback` handlers for callbacks passed into synchronization hooks. Keep the AI SDK transport-based `useChat` flow for streaming conversations; do not replace it with `useActionState` or Server Actions when their sequential action dispatch would add latency or remove incremental output. Use React 19 Actions and Server Actions for atomic mutations where they improve pending/error handling and cache synchronization.
 
 ## Data Fetching, Mutations, and API Contracts
 
