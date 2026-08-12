@@ -22,6 +22,22 @@ interface VoiceResponse {
   };
 }
 
+interface PreparedAudio {
+  audioBuffer: ArrayBuffer;
+  mimeType: string;
+}
+
+export interface VoiceSpeakOptions {
+  onPlaybackStarted?: () => void;
+  onPlaybackFinished?: () => void;
+}
+
+interface VoiceQueueItem extends VoiceSpeakOptions {
+  text: string;
+  prepared?: Promise<PreparedAudio>;
+  preparedController?: AbortController;
+}
+
 async function errorMessageFromResponse(response: Response) {
   try {
     const payload = (await response.json()) as VoiceResponse;
@@ -39,6 +55,11 @@ function supportsAudioStreaming() {
   );
 }
 
+function decodeAudioBase64(audioBase64: string) {
+  const binary = atob(audioBase64);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer;
+}
+
 export function useCompanionVoice({
   companionId,
   sessionId,
@@ -54,7 +75,11 @@ export function useCompanionVoice({
   const [isPreparing, setIsPreparing] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
-  const requestControllerRef = useRef<AbortController | null>(null);
+  const requestControllersRef = useRef(new Set<AbortController>());
+  const voiceQueueRef = useRef<VoiceQueueItem[]>([]);
+  const queueWorkerActiveRef = useRef(false);
+  const queueGenerationRef = useRef(0);
+  const hasPlayedItemRef = useRef(false);
 
   const releaseAudio = useCallback(() => {
     const audio = audioRef.current;
@@ -72,8 +97,11 @@ export function useCompanionVoice({
   }, []);
 
   const stopSpeaking = useCallback(() => {
-    requestControllerRef.current?.abort();
-    requestControllerRef.current = null;
+    queueGenerationRef.current += 1;
+    requestControllersRef.current.forEach((controller) => controller.abort());
+    requestControllersRef.current.clear();
+    voiceQueueRef.current = [];
+    hasPlayedItemRef.current = false;
     if (hasBrowserFallback) window.speechSynthesis.cancel();
     releaseAudio();
     setIsPreparing(false);
@@ -81,57 +109,83 @@ export function useCompanionVoice({
   }, [hasBrowserFallback, releaseAudio]);
 
   const fallbackSpeak = useCallback(
-    (text: string, onPlaybackStarted?: () => void) => {
+    async (text: string, callbacks: VoiceSpeakOptions = {}) => {
       if (!hasBrowserFallback) {
         setIsSpeaking(false);
-        onPlaybackStarted?.();
+        callbacks.onPlaybackStarted?.();
+        callbacks.onPlaybackFinished?.();
         return;
       }
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-      utterance.rate = companionId === "rina" ? 1.02 : 0.96;
-      utterance.pitch = companionId === "rina" ? 1.08 : 0.88;
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-      onPlaybackStarted?.();
+      await new Promise<void>((resolve) => {
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          setIsSpeaking(false);
+          callbacks.onPlaybackFinished?.();
+          resolve();
+        };
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "en-US";
+        utterance.rate = companionId === "rina" ? 1.02 : 0.96;
+        utterance.pitch = companionId === "rina" ? 1.08 : 0.88;
+        utterance.onend = finish;
+        utterance.onerror = finish;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+        callbacks.onPlaybackStarted?.();
+      });
     },
     [companionId, hasBrowserFallback],
   );
 
   const playAudioBuffer = useCallback(
     async (
-      audioBuffer: ArrayBuffer,
-      mimeType: string,
-      onPlaybackStarted?: () => void,
+      preparedAudio: PreparedAudio,
+      signal: AbortSignal,
+      callbacks: VoiceSpeakOptions,
     ) => {
-      const objectUrl = URL.createObjectURL(new Blob([audioBuffer], { type: mimeType }));
+      const objectUrl = URL.createObjectURL(
+        new Blob([preparedAudio.audioBuffer], { type: preparedAudio.mimeType }),
+      );
       const audio = new Audio(objectUrl);
       audio.preload = "auto";
       objectUrlRef.current = objectUrl;
       audioRef.current = audio;
-      audio.onended = () => {
+
+      const playbackEnded = new Promise<void>((resolve, reject) => {
+        const handleAbort = () => reject(new DOMException("Playback aborted.", "AbortError"));
+        const finish = () => {
+          signal.removeEventListener("abort", handleAbort);
+          releaseAudio();
+          setIsSpeaking(false);
+          resolve();
+        };
+        audio.onended = finish;
+        audio.onerror = () => {
+          signal.removeEventListener("abort", handleAbort);
+          releaseAudio();
+          setIsSpeaking(false);
+          reject(new Error("Audio playback failed."));
+        };
+        signal.addEventListener("abort", handleAbort, { once: true });
+      });
+
+      try {
+        await audio.play();
+        if (signal.aborted) throw new DOMException("Playback aborted.", "AbortError");
+        callbacks.onPlaybackStarted?.();
+        await playbackEnded;
+      } finally {
         releaseAudio();
-        setIsSpeaking(false);
-      };
-      audio.onerror = () => {
-        releaseAudio();
-        setIsSpeaking(false);
-      };
-      await audio.play();
-      onPlaybackStarted?.();
+      }
     },
     [releaseAudio],
   );
 
-  const speakRemotely = useCallback(
-    async (
-      text: string,
-      controller: AbortController,
-      onPlaybackStarted?: () => void,
-    ) => {
+  const prepareAudio = useCallback(
+    async (text: string, controller: AbortController): Promise<PreparedAudio> => {
       if (!sessionId || !accessToken) throw new Error("Voice session is unavailable.");
 
       const response = await fetch(appRoutes.api.voice, {
@@ -145,23 +199,23 @@ export function useCompanionVoice({
       const payload = (await response.json()) as VoiceResponse;
       if (!payload.data) throw new Error("Voice generation failed.");
 
-      const binary = atob(payload.data.audioBase64);
-      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-      await playAudioBuffer(bytes.buffer, payload.data.mimeType, onPlaybackStarted);
+      return {
+        audioBuffer: decodeAudioBase64(payload.data.audioBase64),
+        mimeType: payload.data.mimeType,
+      };
     },
-    [accessToken, companionId, playAudioBuffer, sessionId],
+    [accessToken, companionId, sessionId],
   );
 
   const playProgressiveResponse = useCallback(
     async (
       response: Response,
       signal: AbortSignal,
-      onPlaybackStarted: () => void,
+      callbacks: VoiceSpeakOptions,
     ) => {
       if (!response.body || !supportsAudioStreaming()) {
         throw new Error("Progressive audio is unavailable.");
       }
-
       if (signal.aborted) {
         throw new DOMException("Playback aborted.", "AbortError");
       }
@@ -176,12 +230,15 @@ export function useCompanionVoice({
 
       const playbackEnded = new Promise<void>((resolve, reject) => {
         const handleAbort = () => reject(new DOMException("Playback aborted.", "AbortError"));
-        audio.onended = () => {
+        const finish = () => {
+          signal.removeEventListener("abort", handleAbort);
           releaseAudio();
           setIsSpeaking(false);
           resolve();
         };
+        audio.onended = finish;
         audio.onerror = () => {
+          signal.removeEventListener("abort", handleAbort);
           releaseAudio();
           setIsSpeaking(false);
           reject(new Error("Progressive audio playback failed."));
@@ -240,13 +297,11 @@ export function useCompanionVoice({
           if (!started) {
             await audio.play();
             started = true;
-            onPlaybackStarted();
+            callbacks.onPlaybackStarted?.();
           }
         }
 
-        if (mediaSource.readyState === "open") {
-          mediaSource.endOfStream();
-        }
+        if (mediaSource.readyState === "open") mediaSource.endOfStream();
         await playbackEnded;
       } finally {
         reader.releaseLock();
@@ -256,51 +311,112 @@ export function useCompanionVoice({
     [releaseAudio],
   );
 
-  const speakStream = useCallback(
-    async (
-      text: string,
-      controller: AbortController,
-      onPlaybackStarted?: () => void,
-    ) => {
-      if (!sessionId || !accessToken) throw new Error("Voice session is unavailable.");
-      if (!supportsAudioStreaming()) {
-        return speakRemotely(text, controller, onPlaybackStarted);
-      }
-
-      const response = await fetch(appRoutes.api.voiceStream, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ accessToken, sessionId, companionId, text: text.trim() }),
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error(await errorMessageFromResponse(response));
-
-      let started = false;
-      try {
-        await playProgressiveResponse(response, controller.signal, () => {
-          onPlaybackStarted?.();
-          started = true;
+  const playQueueItem = useCallback(
+    async (item: VoiceQueueItem, useProgressiveFirst: boolean) => {
+      const controller = new AbortController();
+      requestControllersRef.current.add(controller);
+      let playbackStarted = false;
+      const callbacks: VoiceSpeakOptions = {
+        onPlaybackStarted: () => {
+          playbackStarted = true;
           setIsPreparing(false);
-        });
+          setIsSpeaking(true);
+          item.onPlaybackStarted?.();
+        },
+      };
+
+      try {
+        if (useProgressiveFirst && supportsAudioStreaming()) {
+          if (!sessionId || !accessToken) throw new Error("Voice session is unavailable.");
+          const response = await fetch(appRoutes.api.voiceStream, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({
+              accessToken,
+              sessionId,
+              companionId,
+              text: item.text.trim(),
+            }),
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+          await playProgressiveResponse(response, controller.signal, callbacks);
+        } else {
+          const preparedAudio = item.prepared
+            ? await item.prepared
+            : await prepareAudio(item.text, controller);
+          await playAudioBuffer(preparedAudio, controller.signal, callbacks);
+        }
       } catch (error) {
         releaseAudio();
-        if (!started && !controller.signal.aborted) {
-          await speakRemotely(text, controller, onPlaybackStarted);
-          return;
+        if (controller.signal.aborted) throw error;
+        if (!playbackStarted) {
+          console.warn("Neural voice unavailable; using browser fallback.", error);
+          await fallbackSpeak(item.text, callbacks);
+        } else {
+          console.warn("Neural voice playback ended unexpectedly.", error);
         }
-        throw error;
+      } finally {
+        requestControllersRef.current.delete(controller);
       }
     },
     [
       accessToken,
       companionId,
+      fallbackSpeak,
+      playAudioBuffer,
       playProgressiveResponse,
+      prepareAudio,
       releaseAudio,
       sessionId,
-      speakRemotely,
     ],
   );
+
+  const prefetchQueueItem = useCallback(
+    (item: VoiceQueueItem) => {
+      if (item.prepared || item.preparedController) return;
+      const controller = new AbortController();
+      item.preparedController = controller;
+      requestControllersRef.current.add(controller);
+      item.prepared = prepareAudio(item.text, controller).finally(() => {
+        requestControllersRef.current.delete(controller);
+        if (item.preparedController === controller) item.preparedController = undefined;
+      });
+    },
+    [prepareAudio],
+  );
+
+  const ensurePrefetch = useCallback(() => {
+    voiceQueueRef.current.slice(0, 2).forEach(prefetchQueueItem);
+  }, [prefetchQueueItem]);
+
+  const processQueue = useCallback(async () => {
+    if (queueWorkerActiveRef.current) return;
+    queueWorkerActiveRef.current = true;
+    const generation = queueGenerationRef.current;
+
+    try {
+      while (
+        voiceQueueRef.current.length > 0 &&
+        generation === queueGenerationRef.current
+      ) {
+        const item = voiceQueueRef.current.shift();
+        if (!item) continue;
+        ensurePrefetch();
+        await playQueueItem(item, !hasPlayedItemRef.current);
+        hasPlayedItemRef.current = true;
+        item.onPlaybackFinished?.();
+      }
+    } finally {
+      queueWorkerActiveRef.current = false;
+      if (voiceQueueRef.current.length === 0) {
+        hasPlayedItemRef.current = false;
+        setIsPreparing(false);
+        setIsSpeaking(false);
+      }
+    }
+  }, [ensurePrefetch, playQueueItem]);
 
   const setVoiceEnabled = useCallback(
     (enabled: boolean) => {
@@ -311,32 +427,27 @@ export function useCompanionVoice({
   );
 
   const speak = useCallback(
-    async (text: string, onPlaybackStarted?: () => void) => {
-      if (!voiceEnabled || !isSupported || !text.trim()) return;
-
-      stopSpeaking();
-      const controller = new AbortController();
-      requestControllerRef.current = controller;
-      setIsPreparing(true);
-      setIsSpeaking(true);
-
-      try {
-        await speakStream(text.trim(), controller, onPlaybackStarted);
-      } catch (error) {
-        releaseAudio();
-        if (!controller.signal.aborted) {
-          console.warn("Neural voice unavailable; using browser fallback.", error);
-          setIsPreparing(false);
-          fallbackSpeak(text, onPlaybackStarted);
-        }
-      } finally {
-        if (requestControllerRef.current === controller) {
-          requestControllerRef.current = null;
-        }
-        if (!controller.signal.aborted) setIsPreparing(false);
+    (text: string, options: VoiceSpeakOptions = {}) => {
+      const trimmedText = text.trim();
+      if (!trimmedText) {
+        options.onPlaybackStarted?.();
+        options.onPlaybackFinished?.();
+        return;
       }
+      if (!voiceEnabled || !isSupported) {
+        options.onPlaybackStarted?.();
+        options.onPlaybackFinished?.();
+        return;
+      }
+
+      const wasActive = queueWorkerActiveRef.current;
+      voiceQueueRef.current.push({ text: trimmedText, ...options });
+      setIsSpeaking(true);
+      if (!wasActive) setIsPreparing(true);
+      if (wasActive) ensurePrefetch();
+      void processQueue();
     },
-    [fallbackSpeak, isSupported, releaseAudio, speakStream, stopSpeaking, voiceEnabled],
+    [ensurePrefetch, isSupported, processQueue, voiceEnabled],
   );
 
   useEffect(() => {

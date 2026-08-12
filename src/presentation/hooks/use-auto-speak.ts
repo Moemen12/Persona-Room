@@ -3,12 +3,17 @@
 import type { UIMessage } from "ai";
 import { useEffect, useRef } from "react";
 
+interface SpeakOptions {
+  onPlaybackStarted?: () => void;
+  onPlaybackFinished?: () => void;
+}
+
 interface UseAutoSpeakOptions {
   messages: UIMessage[];
   isStreaming: boolean;
   enabled: boolean;
   resetKey?: string;
-  speak: (text: string, onPlaybackStarted?: () => void) => Promise<void> | void;
+  speak: (text: string, options?: SpeakOptions) => Promise<void> | void;
   stopSpeaking?: () => void;
   onSegmentPlaybackStarted?: (assistantId: string, segment: string) => void;
   onNarrationCompleted?: (assistantId: string) => void;
@@ -72,6 +77,7 @@ export function useAutoSpeak({
   const speechQueueRef = useRef<string[]>([]);
   const speechLoopActiveRef = useRef(false);
   const speechGenerationRef = useRef(0);
+  const pendingPlaybackCountRef = useRef(0);
   const previousResetKeyRef = useRef(resetKey);
   const previousEnabledRef = useRef(enabled);
   const isStreamingRef = useRef(isStreaming);
@@ -90,6 +96,7 @@ export function useAutoSpeak({
       observedTextRef.current = "";
       pendingSpeechTextRef.current = "";
       speechQueueRef.current = [];
+      pendingPlaybackCountRef.current = 0;
       speechGenerationRef.current += 1;
       stopSpeaking?.();
       return;
@@ -98,6 +105,7 @@ export function useAutoSpeak({
     if (!enabled && previousEnabledRef.current) {
       speechQueueRef.current = [];
       pendingSpeechTextRef.current = "";
+      pendingPlaybackCountRef.current = 0;
       speechGenerationRef.current += 1;
       stopSpeaking?.();
     }
@@ -121,6 +129,7 @@ export function useAutoSpeak({
       activeAssistantIdRef.current = latestAssistant.id;
       observedTextRef.current = "";
       pendingSpeechTextRef.current = "";
+      pendingPlaybackCountRef.current = 0;
     }
 
     if (latestAssistant.id !== activeAssistantIdRef.current) return;
@@ -138,35 +147,58 @@ export function useAutoSpeak({
     pendingSpeechTextRef.current = remainder;
     speechQueueRef.current.push(...segments);
 
-    if (!speechQueueRef.current.length || speechLoopActiveRef.current) return;
+    if (speechLoopActiveRef.current) return;
 
     const generation = speechGenerationRef.current;
     speechLoopActiveRef.current = true;
-    void (async () => {
-      try {
-        while (
-          speechQueueRef.current.length &&
-          generation === speechGenerationRef.current &&
-          enabled
-        ) {
-          const segment = speechQueueRef.current.shift();
-          const assistantId = activeAssistantIdRef.current;
-          if (!segment || !assistantId) continue;
-          await speak(segment, () => onSegmentPlaybackStarted?.(assistantId, segment));
-        }
-      } finally {
-        speechLoopActiveRef.current = false;
+    try {
+      while (
+        speechQueueRef.current.length &&
+        generation === speechGenerationRef.current &&
+        enabled
+      ) {
+        const segment = speechQueueRef.current.shift();
         const assistantId = activeAssistantIdRef.current;
-        if (
-          assistantId &&
-          generation === speechGenerationRef.current &&
-          !isStreamingRef.current &&
-          speechQueueRef.current.length === 0
-        ) {
-          onNarrationCompleted?.(assistantId);
+        if (!segment || !assistantId) continue;
+
+        pendingPlaybackCountRef.current += 1;
+        let playbackSettled = false;
+        const settlePlayback = () => {
+          if (playbackSettled || generation !== speechGenerationRef.current) return;
+          playbackSettled = true;
+          pendingPlaybackCountRef.current = Math.max(
+            0,
+            pendingPlaybackCountRef.current - 1,
+          );
+          if (
+            !isStreamingRef.current &&
+            pendingPlaybackCountRef.current === 0 &&
+            speechQueueRef.current.length === 0
+          ) {
+            onNarrationCompleted?.(assistantId);
+          }
+        };
+
+        try {
+          const result = speak(segment, {
+            onPlaybackStarted: () => onSegmentPlaybackStarted?.(assistantId, segment),
+            onPlaybackFinished: settlePlayback,
+          });
+          if (result instanceof Promise) void result.catch(settlePlayback);
+        } catch {
+          settlePlayback();
         }
       }
-    })();
+    } finally {
+      speechLoopActiveRef.current = false;
+      if (
+        !isStreamingRef.current &&
+        pendingPlaybackCountRef.current === 0 &&
+        speechQueueRef.current.length === 0
+      ) {
+        onNarrationCompleted?.(activeAssistantIdRef.current ?? "");
+      }
+    }
   }, [
     enabled,
     isStreaming,
