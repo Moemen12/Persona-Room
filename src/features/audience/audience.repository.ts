@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient } from "@/infrastructure/supabase/server";
 import { type VoteOption } from "@/lib/config/app";
+import { sortRoomMessages } from "@/lib/message-order";
 import { type RoomMessage } from "./audience.types";
 import { type CompanionId } from "@/features/persona/persona.types";
 
@@ -11,14 +12,18 @@ export async function findRoomMessages(userId: string, companionId: CompanionId,
     .eq("user_id", userId)
     .eq("companion_id", companionId)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []).reverse().map((row) => ({
-    id: String(row.id),
-    role: row.role as "user" | "assistant",
-    content: String(row.content),
-    createdAt: String(row.created_at),
-  }));
+
+  return sortRoomMessages(
+    (data ?? []).map((row) => ({
+      id: String(row.id),
+      role: row.role as "user" | "assistant",
+      content: String(row.content),
+      createdAt: String(row.created_at),
+    })),
+  );
 }
 
 export async function findVoteTally(sessionId: string): Promise<Record<string, number>> {

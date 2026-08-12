@@ -1,9 +1,9 @@
 import { type UIMessage } from "ai";
 import { LoaderCircle, Sparkles } from "lucide-react";
-import { useEffect, useRef } from "react";
 
 import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona";
 import { MessageBubble } from "@/presentation/components/message-bubble";
+import { useTranscriptAutoScroll } from "@/presentation/hooks/use-transcript-auto-scroll";
 
 interface ChatTranscriptProps {
   messages: UIMessage[];
@@ -32,14 +32,15 @@ export function ChatTranscript({
   companionId,
   mood: _mood,
 }: ChatTranscriptProps) {
-  const messageListRef = useRef<HTMLDivElement>(null);
   const companion = COMPANIONS[companionId];
-
-  useEffect(() => {
-    if (messageListRef.current) {
-      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
-    }
-  }, [messages, isStreaming]);
+  const latestMessage = messages.at(-1);
+  const latestMessageText = latestMessage ? messageText(latestMessage) : "";
+  const messageListRef = useTranscriptAutoScroll({
+    messageCount: messages.length,
+    lastMessageId: latestMessage?.id,
+    resetKey: companionId,
+    contentKey: `${isStreaming ? "streaming" : "idle"}:${latestMessageText}`,
+  });
 
   return (
     <div className="message-list" ref={messageListRef} tabIndex={0} aria-label="Conversation transcript">

@@ -8,6 +8,7 @@ import { getRedisClient, withRedisFallback } from "@/infrastructure/redis/client
 import { getSupabaseAdminClient } from "@/infrastructure/supabase/server";
 
 import * as audienceRepository from "./audience.repository";
+import { sortRoomMessages } from "@/lib/message-order";
 import type { RoomBroadcast, RoomSnapshot, VoteTally, AudienceServiceDependencies } from "./audience.types";
 
 function emptyTally(): VoteTally {
@@ -66,10 +67,12 @@ export async function getRoomSnapshot(
   const { session, user } = await getInternalUserForSession(sessionId);
   if (!session.audienceEnabled) throw new NotFoundError("Room");
 
-  const messages = await dependencies.findRoomMessages(
-    user.id,
-    session.companionId,
-    APP_CONFIG.publicTranscriptLimit,
+  const messages = sortRoomMessages(
+    await dependencies.findRoomMessages(
+      user.id,
+      session.companionId,
+      APP_CONFIG.publicTranscriptLimit,
+    ),
   );
 
   return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useState } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 
 import { submitVoteAction } from "@/actions/audience.actions";
 import type { VoteTally } from "@/features/audience";
@@ -21,6 +21,7 @@ export function VotePanel({ roomId, companionId, initialTally, fingerprint }: Vo
   const { play } = useInterfaceSound();
   const [submittingOption, setSubmittingOption] = useState<VoteOption>();
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [isVotePending, startVoteTransition] = useTransition();
 
   const [optimisticTally, setOptimisticTally] = useOptimistic(
     initialTally,
@@ -32,24 +33,26 @@ export function VotePanel({ roomId, companionId, initialTally, fingerprint }: Vo
 
   const highestVote = Math.max(1, ...Object.values(optimisticTally).map(Number));
 
-  const handleVote = async (option: VoteOption) => {
-    if (submittingOption) return;
+  const handleVote = (option: VoteOption) => {
+    if (submittingOption || isVotePending) return;
     play("vote");
     setSubmittingOption(option);
     setErrorMessage(undefined);
 
-    setOptimisticTally(option);
+    startVoteTransition(async () => {
+      setOptimisticTally(option);
 
-    try {
-      const result = await submitVoteAction(roomId, option, fingerprint);
-      if (!result.success) {
-        setErrorMessage(result.error);
+      try {
+        const result = await submitVoteAction(roomId, option, fingerprint);
+        if (!result.success) {
+          setErrorMessage(result.error);
+        }
+      } catch {
+        setErrorMessage("That vote did not land. Try again.");
+      } finally {
+        setSubmittingOption(undefined);
       }
-    } catch {
-      setErrorMessage("That vote did not land. Try again.");
-    } finally {
-      setSubmittingOption(undefined);
-    }
+    });
   };
 
   return (
@@ -81,8 +84,8 @@ export function VotePanel({ roomId, companionId, initialTally, fingerprint }: Vo
               key={candidate.value}
               className={cn("vote-option", isSelected && "vote-option--selected")}
               type="button"
-              onClick={() => void handleVote(candidate.value)}
-              disabled={Boolean(submittingOption)}
+              onClick={() => handleVote(candidate.value)}
+              disabled={Boolean(submittingOption || isVotePending)}
             >
               <span className="vote-option__main">
                 <span className="vote-option__emoji" aria-hidden="true">{candidate.emoji}</span>

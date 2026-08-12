@@ -4,9 +4,11 @@ import { Radio } from "lucide-react";
 import { useState } from "react";
 
 import type { RoomBroadcast, RoomSnapshot } from "@/features/audience";
+import { sortRoomMessages } from "@/lib/message-order";
 import type { PersonaMood } from "@/features/persona";
 import { MessageBubble } from "@/presentation/components/message-bubble";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
+import { useTranscriptAutoScroll } from "@/presentation/hooks/use-transcript-auto-scroll";
 
 interface AudienceTranscriptProps {
   initialSnapshot: RoomSnapshot;
@@ -14,8 +16,16 @@ interface AudienceTranscriptProps {
 }
 
 export function AudienceTranscript({ initialSnapshot, roomId }: AudienceTranscriptProps) {
-  const [snapshot, setSnapshot] = useState<RoomSnapshot>(initialSnapshot);
+  const [snapshot, setSnapshot] = useState<RoomSnapshot>(() => ({
+    ...initialSnapshot,
+    messages: sortRoomMessages(initialSnapshot.messages),
+  }));
   const [, setMood] = useState<PersonaMood>("neutral");
+  const transcriptRef = useTranscriptAutoScroll({
+    messageCount: snapshot.messages.length,
+    lastMessageId: snapshot.messages.at(-1)?.id,
+    resetKey: snapshot.companionId,
+  });
 
   useRoomRealtime({
     roomId,
@@ -39,7 +49,7 @@ export function AudienceTranscript({ initialSnapshot, roomId }: AudienceTranscri
       setSnapshot((current) => {
         const nextMessages =
           incomingMessage && !current.messages.some((message) => message.id === incomingMessage.id)
-            ? [...current.messages, incomingMessage]
+            ? sortRoomMessages([...current.messages, incomingMessage])
             : current.messages;
         return {
           ...current,
@@ -62,7 +72,12 @@ export function AudienceTranscript({ initialSnapshot, roomId }: AudienceTranscri
         <span className="chat-card__hint">Synced with room</span>
       </div>
 
-      <div className="audience-transcript__body" tabIndex={0} aria-label="Room transcript">
+      <div
+        className="audience-transcript__body"
+        ref={transcriptRef}
+        tabIndex={0}
+        aria-label="Room transcript"
+      >
         {snapshot.messages.length === 0 ? (
           <div className="waiting-state">
             <span>No conversation in this room yet. Send a message to start!</span>
