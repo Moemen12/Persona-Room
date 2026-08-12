@@ -375,6 +375,45 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 }
 .audience-transcript .message-bubble { margin: 0; }
 .audience-transcript .message-bubble--user { margin-left: auto; }
+.audience-typing {
+  @apply inline-flex items-center gap-2 self-start rounded-[15px] px-3 py-2 text-[0.72rem];
+  color: rgba(231, 224, 255, 0.7);
+  border: 1px solid rgba(197, 174, 255, 0.16);
+  background: rgba(105, 73, 180, 0.12);
+  animation: rise 180ms ease-out;
+}
+.audience-typing__avatar {
+  @apply grid h-5 w-5 place-items-center rounded-full text-[0.62rem] font-[820];
+  color: #201238;
+  background: linear-gradient(135deg, #dfc6ff, #a98aff);
+}
+.audience-typing__dots { @apply inline-flex items-center gap-1; }
+.audience-typing__dots i {
+  @apply block h-1 w-1 rounded-full;
+  background: #d8bdff;
+  animation: typing-dot 900ms ease-in-out infinite;
+}
+.audience-typing__dots i:nth-child(2) { animation-delay: 120ms; }
+.audience-typing__dots i:nth-child(3) { animation-delay: 240ms; }
+.audience-reaction {
+  @apply pointer-events-none fixed inset-0 z-30 grid place-items-center;
+}
+.audience-reaction__toast {
+  @apply inline-flex items-center gap-2 rounded-full px-4 py-2 text-[0.76rem] font-[760];
+  color: #fff;
+  border: 1px solid rgba(229, 211, 255, 0.36);
+  background: linear-gradient(135deg, rgba(112, 67, 206, 0.92), rgba(34, 21, 79, 0.94));
+  box-shadow: 0 18px 60px rgba(66, 25, 153, 0.4);
+  animation: reaction-toast 2400ms cubic-bezier(.23, 1, .32, 1) both;
+}
+.audience-reaction__icon { @apply inline-flex text-[#ffe3a3]; }
+.audience-reaction__confetti { @apply absolute inset-1/2; }
+.audience-reaction__confetti-piece {
+  @apply absolute block h-2 w-1 rounded-full;
+  background: var(--confetti-color);
+  animation: confetti-burst 1500ms cubic-bezier(.23, 1, .32, 1) var(--confetti-delay) both;
+  transform: rotate(var(--confetti-rotate));
+}
 
 .vote-panel {
   grid-area: vote;
@@ -478,6 +517,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 @keyframes halo { 0%, 100% { opacity: 0.72; transform: scale(0.98); } 50% { opacity: 1; transform: scale(1.04); } }
 @keyframes rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes blink { 50% { opacity: 0.12; } }
+@keyframes typing-dot { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+@keyframes reaction-toast { 0% { opacity: 0; transform: translateY(12px) scale(0.96); } 12%, 78% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-8px) scale(0.98); } }
+@keyframes confetti-burst { 0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(var(--confetti-rotate)); } 18% { opacity: 1; } 100% { opacity: 0; transform: translate3d(var(--confetti-x), -105px, 0) rotate(calc(var(--confetti-rotate) + 220deg)); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse-opacity { 50% { opacity: 0.38; } }
 @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(200, 170, 255, 0.48); } 68%, 100% { box-shadow: 0 0 0 8px rgba(200, 170, 255, 0); } }
@@ -568,7 +610,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 @media (prefers-reduced-motion: reduce) {
   .rina-avatar--speaking,
   .rina-avatar--speaking::before,
-  .rina-avatar--speaking .rina-avatar__glow {
+  .rina-avatar--speaking .rina-avatar__glow,
+  .audience-typing__dots i,
+  .audience-reaction__toast,
+  .audience-reaction__confetti-piece {
     animation: none;
   }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
