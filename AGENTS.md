@@ -26,6 +26,8 @@ Use **Next.js 16 App Router**, React 19, TypeScript, Tailwind CSS, npm, Supabase
 
 Use Supabase Auth and Postgres as the authoritative identity and durable data boundary. Use Supabase Realtime for live room synchronization and Upstash only for cache, rate limits, transient tallies/presence, and request-cap coordination. Never use a browser fingerprint as the source of truth for loading a user’s conversation or authorizing an action.
 
+Apply a **free-first rule** to every feature: prefer browser-native Web APIs, local computation, open-source packages, and existing free-tier services before proposing any paid provider. Do not add a paid API, paid SDK, subscription service, or usage-billed integration when a reliable free alternative can satisfy the MVP requirement. If a paid provider is ever genuinely necessary, explain the cost and ask for approval first.
+
 ## React and Frontend Standards
 
 Favor intentional, premium, accessible UI over generic SaaS boilerplate. The product must work on desktop and mobile, with mobile prioritizing the main information and primary action. Preserve visible focus states and keyboard access.

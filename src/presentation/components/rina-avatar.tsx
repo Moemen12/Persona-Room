@@ -15,6 +15,7 @@ interface RinaAvatarProps {
   companionId?: CompanionId;
   size?: "hero" | "room" | "message";
   className?: string;
+  isSpeaking?: boolean;
 }
 
 export function RinaAvatar({
@@ -22,12 +23,18 @@ export function RinaAvatar({
   companionId = "rina",
   size = "hero",
   className,
+  isSpeaking = false,
 }: RinaAvatarProps) {
   const companion = COMPANIONS[companionId];
   return (
     <div
-      className={cn("rina-avatar", `rina-avatar--${size}`, className)}
-      aria-label={`${companion.name} is feeling ${mood}`}
+      className={cn(
+        "rina-avatar",
+        `rina-avatar--${size}`,
+        isSpeaking && "rina-avatar--speaking",
+        className,
+      )}
+      aria-label={`${companion.name} is feeling ${mood}${isSpeaking ? " and speaking" : ""}`}
     >
       <div className="rina-avatar__glow" />
       {Object.entries(expressionFile).map(([expression, file]) => (

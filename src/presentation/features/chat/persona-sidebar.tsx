@@ -9,6 +9,7 @@ interface PersonaSidebarProps {
   mood: PersonaMood;
   isLive: boolean;
   viewerCount: number;
+  isSpeaking: boolean;
   onOpenSelector: () => void;
 }
 
@@ -22,6 +23,7 @@ export function PersonaSidebar({
   mood,
   isLive,
   viewerCount,
+  isSpeaking,
   onOpenSelector,
 }: PersonaSidebarProps) {
   const companion = COMPANIONS[companionId];
@@ -35,7 +37,7 @@ export function PersonaSidebar({
         <span>LIVE</span>
       </div>
 
-      <RinaAvatar companionId={companionId} mood={mood} size="hero" />
+      <RinaAvatar companionId={companionId} mood={mood} size="hero" isSpeaking={isSpeaking} />
 
       <div className="persona-profile__copy">
         <span className="eyebrow">

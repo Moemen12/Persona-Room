@@ -198,6 +198,16 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   background: radial-gradient(circle, rgba(157, 109, 255, 0.52), transparent 64%);
   filter: blur(12px);
 }
+.rina-avatar--speaking {
+  animation: speaking-bob 820ms ease-in-out infinite;
+}
+.rina-avatar--speaking::before {
+  border-color: rgba(222, 202, 255, 0.55);
+  animation: speaking-ring 820ms ease-in-out infinite;
+}
+.rina-avatar--speaking .rina-avatar__glow {
+  animation: speaking-glow 820ms ease-in-out infinite;
+}
 .rina-avatar__image {
   @apply absolute inset-0 w-full h-full rounded-[inherit] object-cover opacity-0 transition-all duration-500;
   border: 1px solid rgba(218, 203, 255, 0.64);
@@ -461,6 +471,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 .companion-choice__copy small { @apply text-[var(--muted)] text-[0.68rem] leading-[1.35]; }
 
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes speaking-bob { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-4px) scale(1.025); } }
+@keyframes speaking-ring { 0%, 100% { transform: scale(1); opacity: 0.62; } 50% { transform: scale(1.07); opacity: 1; } }
+@keyframes speaking-glow { 0%, 100% { opacity: 0.62; transform: scale(0.98); } 50% { opacity: 1; transform: scale(1.08); } }
 @keyframes drift { 0%, 100% { transform: translate3d(0, 0, 0) scale(1); } 50% { transform: translate3d(18px, -24px, 0) scale(1.06); } }
 @keyframes halo { 0%, 100% { opacity: 0.72; transform: scale(0.98); } 50% { opacity: 1; transform: scale(1.04); } }
 @keyframes rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
@@ -553,5 +566,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rina-avatar--speaking,
+  .rina-avatar--speaking::before,
+  .rina-avatar--speaking .rina-avatar__glow {
+    animation: none;
+  }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

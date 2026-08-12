@@ -11,6 +11,8 @@ import { appRoutes } from "@/infrastructure/config/routes";
 import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
 import { getSafeChatAuth, getSafeCompanionHint, setSafeChatAuth } from "@/lib/storage";
 import { LoadingScreen } from "@/presentation/components/shared/loading-screen";
+import { useAutoSpeak } from "@/presentation/hooks/use-auto-speak";
+import { useBrowserVoice } from "@/presentation/hooks/use-browser-voice";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
@@ -123,6 +125,15 @@ function messageText(message: UIMessage) {
 export function ChatExperience() {
   const [state, dispatch] = useReducer(chatClientReducer, initialChatState);
   const { play } = useInterfaceSound();
+  const companionId = state.identity?.bootstrap.session.companionId ?? state.hintedCompanionId ?? "rina";
+  const {
+    isSupported: isVoiceSupported,
+    voiceEnabled,
+    isSpeaking,
+    setVoiceEnabled,
+    speak,
+    stopSpeaking,
+  } = useBrowserVoice({ companionId });
 
   const [chat] = useState(
     () =>
@@ -235,13 +246,13 @@ export function ChatExperience() {
         body: JSON.stringify({ sessionId: state.identity.bootstrap.session.id, companionId }),
       });
       if (!response.ok) throw new Error("Companion update failed");
-
+      stop();
+      stopSpeaking();
       const bootstrapResponse = await fetch(appRoutes.api.session, {
         method: "POST",
         headers: { authorization: `Bearer ${state.identity.accessToken}` },
       });
       if (!bootstrapResponse.ok) throw new Error("Companion refresh failed");
-      stop();
       const bootstrapResult = (await bootstrapResponse.json()) as { data: SessionBootstrap };
       const bootstrap = bootstrapResult.data;
       setMessages(bootstrap.messages.map(asUiMessage));
@@ -279,7 +290,13 @@ export function ChatExperience() {
 
   const isLoading = !state.identity && !state.setupError;
   const isStreaming = status === "submitted" || status === "streaming";
-  const companionId = state.identity?.bootstrap.session.companionId ?? state.hintedCompanionId ?? "rina";
+
+  useAutoSpeak({
+    messages,
+    isStreaming,
+    enabled: voiceEnabled,
+    speak,
+  });
 
   if (isLoading && !state.setupError) {
     return <LoadingScreen />;
@@ -300,7 +317,12 @@ export function ChatExperience() {
       ) : null}
 
       <div className="chat-stage">
-        <ChatHeader sessionId={state.identity?.bootstrap.session.id} />
+        <ChatHeader
+          sessionId={state.identity?.bootstrap.session.id}
+          isVoiceSupported={isVoiceSupported}
+          voiceEnabled={voiceEnabled}
+          onToggleVoice={() => setVoiceEnabled(!voiceEnabled)}
+        />
 
         <div className="chat-layout">
           <PersonaSidebar
@@ -308,6 +330,7 @@ export function ChatExperience() {
             mood={state.mood}
             isLive={Boolean(state.identity)}
             viewerCount={state.viewerCount}
+            isSpeaking={isSpeaking}
             onOpenSelector={() => dispatch({ type: "set-selector-open", open: true })}
           />
 
