@@ -315,9 +315,12 @@ export function ChatExperience() {
   }
 
   return (
-    <main className="persona-shell">
+    <main className="persona-shell stage-enter">
       <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
       <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
+      <div className="stage-sweep" aria-hidden="true" />
+      <div className="stage-sparkle stage-sparkle--one" aria-hidden="true" />
+      <div className="stage-sparkle stage-sparkle--two" aria-hidden="true" />
       
       {state.isSelectorOpen && state.identity ? (
         <CompanionPicker

@@ -12,9 +12,12 @@ export async function AudienceExperience({ roomId }: AudienceExperienceProps) {
   const snapshot = await getRoomSnapshot(roomId);
 
   return (
-    <main className="audience-shell">
+    <main className="audience-shell stage-enter">
       <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
       <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
+      <div className="stage-sweep" aria-hidden="true" />
+      <div className="stage-sparkle stage-sparkle--one" aria-hidden="true" />
+      <div className="stage-sparkle stage-sparkle--two" aria-hidden="true" />
 
       <div className="audience-room">
         <AudienceHeader companionId={snapshot.companionId} viewerCount={1} />
