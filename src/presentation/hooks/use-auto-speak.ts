@@ -8,8 +8,10 @@ interface UseAutoSpeakOptions {
   isStreaming: boolean;
   enabled: boolean;
   resetKey?: string;
-  speak: (text: string) => Promise<void> | void;
+  speak: (text: string, onPlaybackStarted?: () => void) => Promise<void> | void;
   stopSpeaking?: () => void;
+  onSegmentPlaybackStarted?: (assistantId: string, segment: string) => void;
+  onNarrationCompleted?: (assistantId: string) => void;
 }
 
 function messageText(message: UIMessage) {
@@ -30,11 +32,11 @@ function takeReadySegments(text: string, flushRemainder: boolean) {
   while (remaining) {
     const punctuationMatch = /[.!?。！？](?:\s|$)/u.exec(remaining);
     const punctuationEnd = punctuationMatch
-      ? (punctuationMatch.index ?? 0) + punctuationMatch[0].trimEnd().length
+      ? (punctuationMatch.index ?? 0) + punctuationMatch[0].length
       : -1;
     const longEnough = remaining.length >= 120;
     const splitAtWhitespace = longEnough
-      ? remaining.slice(0, 120).lastIndexOf(" ")
+      ? remaining.slice(0, 120).lastIndexOf(" ") + 1
       : -1;
     const splitIndex = punctuationEnd > 0 ? punctuationEnd : splitAtWhitespace;
 
@@ -59,6 +61,8 @@ export function useAutoSpeak({
   resetKey = "default",
   speak,
   stopSpeaking,
+  onSegmentPlaybackStarted,
+  onNarrationCompleted,
 }: UseAutoSpeakOptions) {
   const initializedRef = useRef(false);
   const baselineAssistantIdRef = useRef<string | undefined>(undefined);
@@ -70,8 +74,10 @@ export function useAutoSpeak({
   const speechGenerationRef = useRef(0);
   const previousResetKeyRef = useRef(resetKey);
   const previousEnabledRef = useRef(enabled);
+  const isStreamingRef = useRef(isStreaming);
 
   useEffect(() => {
+    isStreamingRef.current = isStreaming;
     const latestAssistant = [...messages]
       .reverse()
       .find((message) => message.role === "assistant");
@@ -144,12 +150,31 @@ export function useAutoSpeak({
           enabled
         ) {
           const segment = speechQueueRef.current.shift();
-          if (!segment) continue;
-          await speak(segment);
+          const assistantId = activeAssistantIdRef.current;
+          if (!segment || !assistantId) continue;
+          await speak(segment, () => onSegmentPlaybackStarted?.(assistantId, segment));
         }
       } finally {
         speechLoopActiveRef.current = false;
+        const assistantId = activeAssistantIdRef.current;
+        if (
+          assistantId &&
+          generation === speechGenerationRef.current &&
+          !isStreamingRef.current &&
+          speechQueueRef.current.length === 0
+        ) {
+          onNarrationCompleted?.(assistantId);
+        }
       }
     })();
-  }, [enabled, isStreaming, messages, resetKey, speak, stopSpeaking]);
+  }, [
+    enabled,
+    isStreaming,
+    messages,
+    onNarrationCompleted,
+    onSegmentPlaybackStarted,
+    resetKey,
+    speak,
+    stopSpeaking,
+  ]);
 }

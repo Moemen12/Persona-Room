@@ -29,10 +29,18 @@ interface IdentityState {
   accessToken: string;
 }
 
+interface NarrationState {
+  assistantId?: string;
+  visibleText: string;
+  started: boolean;
+  completed: boolean;
+}
+
 interface ChatClientState {
   identity?: IdentityState;
   mood: PersonaMood;
   draft: string;
+  narration: NarrationState;
   setupError?: string;
   viewerCount: number;
   isSelectorOpen: boolean;
@@ -48,6 +56,8 @@ type ChatClientAction =
   | { type: "set-viewer-count"; count: number }
   | { type: "set-selector-open"; open: boolean }
   | { type: "set-changing-companion"; changing: boolean }
+  | { type: "assistant-segment-playback-started"; assistantId: string; segment: string }
+  | { type: "assistant-narration-completed"; assistantId: string }
   | { type: "companion-updated"; bootstrap: SessionBootstrap; mood: PersonaMood };
 
 const CHAT_AUTH_STORAGE_KEY = "persona-room-chat-auth";
@@ -59,6 +69,7 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
       return {
         ...state,
         identity: action.identity,
+        narration: emptyNarrationState,
         mood: action.mood,
         isSelectorOpen: action.openSelector,
         setupError: undefined,
@@ -76,11 +87,30 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
       return { ...state, isSelectorOpen: action.open };
     case "set-changing-companion":
       return { ...state, isChangingCompanion: action.changing };
+    case "assistant-segment-playback-started": {
+      const isNewAssistant = state.narration.assistantId !== action.assistantId;
+      return {
+        ...state,
+        narration: {
+          assistantId: action.assistantId,
+          visibleText: isNewAssistant
+            ? action.segment
+            : `${state.narration.visibleText} ${action.segment}`.trim(),
+          started: true,
+          completed: false,
+        },
+      };
+    }
+    case "assistant-narration-completed":
+      return state.narration.assistantId === action.assistantId
+        ? { ...state, narration: { ...state.narration, completed: true } }
+        : state;
     case "companion-updated":
       return {
         ...state,
         identity: state.identity ? { ...state.identity, bootstrap: action.bootstrap } : undefined,
         mood: action.mood,
+        narration: emptyNarrationState,
         draft: "",
         isSelectorOpen: false,
         hintedCompanionId: action.bootstrap.session.companionId,
@@ -90,8 +120,15 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
   }
 }
 
+const emptyNarrationState: NarrationState = {
+  visibleText: "",
+  started: false,
+  completed: false,
+};
+
 const initialChatState: ChatClientState = {
   mood: "neutral",
+  narration: emptyNarrationState,
   draft: "",
   viewerCount: 0,
   isSelectorOpen: false,
@@ -310,6 +347,10 @@ export function ChatExperience() {
     resetKey: companionId,
     speak,
     stopSpeaking,
+    onSegmentPlaybackStarted: (assistantId, segment) =>
+      dispatch({ type: "assistant-segment-playback-started", assistantId, segment }),
+    onNarrationCompleted: (assistantId) =>
+      dispatch({ type: "assistant-narration-completed", assistantId }),
   });
 
   if (isLoading && !state.setupError) {
@@ -368,6 +409,8 @@ export function ChatExperience() {
               companionId={companionId}
               mood={state.mood}
               proactiveHint={proactiveHint}
+              narration={state.narration}
+              voiceSyncEnabled={voiceEnabled && isVoiceSupported}
             />
 
             {(error || state.setupError) && (

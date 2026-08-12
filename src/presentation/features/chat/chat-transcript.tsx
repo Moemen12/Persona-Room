@@ -5,6 +5,13 @@ import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/perso
 import { MessageBubble } from "@/presentation/components/message-bubble";
 import { useTranscriptAutoScroll } from "@/presentation/hooks/use-transcript-auto-scroll";
 
+interface NarrationSnapshot {
+  assistantId?: string;
+  visibleText: string;
+  started: boolean;
+  completed: boolean;
+}
+
 interface ChatTranscriptProps {
   messages: UIMessage[];
   isLoading: boolean;
@@ -13,6 +20,8 @@ interface ChatTranscriptProps {
   companionId: CompanionId;
   mood: PersonaMood;
   proactiveHint?: string;
+  narration: NarrationSnapshot;
+  voiceSyncEnabled: boolean;
 }
 
 function messageText(message: UIMessage) {
@@ -33,6 +42,8 @@ export function ChatTranscript({
   companionId,
   mood: _mood,
   proactiveHint,
+  narration,
+  voiceSyncEnabled,
 }: ChatTranscriptProps) {
   const companion = COMPANIONS[companionId];
   const latestMessage = messages.at(-1);
@@ -66,30 +77,32 @@ export function ChatTranscript({
       ) : (
         <>
           {messages.map((message) => {
-            const content = messageText(message);
-            const bubbleRole = message.role === "user" ? "user" : "assistant";
-            if (!content && message.role === "assistant" && isStreaming && message === messages[messages.length - 1]) {
-              return (
-                <MessageBubble
-                  key={message.id}
-                  role="assistant"
-                  text=""
-                  assistantName={companion.name}
-                  isStreaming={true}
-                />
-              );
-            }
+            const rawContent = messageText(message);
+            const isLatestMessage = message === messages[messages.length - 1];
+            const isAssistant = message.role === "assistant";
+            const isVoiceGated =
+              voiceSyncEnabled &&
+              isAssistant &&
+              isLatestMessage &&
+              !narration.completed;
+            const content = isVoiceGated
+              ? narration.assistantId === message.id
+                ? narration.visibleText
+                : ""
+              : rawContent;
+            const bubbleRole = isAssistant ? "assistant" : "user";
+            const bubbleIsStreaming =
+              isLatestMessage &&
+              isAssistant &&
+              (isStreaming || (isVoiceGated && !narration.started));
+
             return (
               <MessageBubble
                 key={message.id}
                 role={bubbleRole}
                 text={content}
                 assistantName={companion.name}
-                isStreaming={
-                  isStreaming &&
-                  message.role === "assistant" &&
-                  message === messages[messages.length - 1]
-                }
+                isStreaming={bubbleIsStreaming}
               />
             );
           })}

@@ -81,9 +81,10 @@ export function useCompanionVoice({
   }, [hasBrowserFallback, releaseAudio]);
 
   const fallbackSpeak = useCallback(
-    (text: string) => {
+    (text: string, onPlaybackStarted?: () => void) => {
       if (!hasBrowserFallback) {
         setIsSpeaking(false);
+        onPlaybackStarted?.();
         return;
       }
 
@@ -95,12 +96,17 @@ export function useCompanionVoice({
       utterance.onerror = () => setIsSpeaking(false);
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utterance);
+      onPlaybackStarted?.();
     },
     [companionId, hasBrowserFallback],
   );
 
   const playAudioBuffer = useCallback(
-    async (audioBuffer: ArrayBuffer, mimeType: string) => {
+    async (
+      audioBuffer: ArrayBuffer,
+      mimeType: string,
+      onPlaybackStarted?: () => void,
+    ) => {
       const objectUrl = URL.createObjectURL(new Blob([audioBuffer], { type: mimeType }));
       const audio = new Audio(objectUrl);
       audio.preload = "auto";
@@ -115,12 +121,17 @@ export function useCompanionVoice({
         setIsSpeaking(false);
       };
       await audio.play();
+      onPlaybackStarted?.();
     },
     [releaseAudio],
   );
 
   const speakRemotely = useCallback(
-    async (text: string, controller: AbortController) => {
+    async (
+      text: string,
+      controller: AbortController,
+      onPlaybackStarted?: () => void,
+    ) => {
       if (!sessionId || !accessToken) throw new Error("Voice session is unavailable.");
 
       const response = await fetch(appRoutes.api.voice, {
@@ -136,7 +147,7 @@ export function useCompanionVoice({
 
       const binary = atob(payload.data.audioBase64);
       const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-      await playAudioBuffer(bytes.buffer, payload.data.mimeType);
+      await playAudioBuffer(bytes.buffer, payload.data.mimeType, onPlaybackStarted);
     },
     [accessToken, companionId, playAudioBuffer, sessionId],
   );
@@ -246,9 +257,15 @@ export function useCompanionVoice({
   );
 
   const speakStream = useCallback(
-    async (text: string, controller: AbortController) => {
+    async (
+      text: string,
+      controller: AbortController,
+      onPlaybackStarted?: () => void,
+    ) => {
       if (!sessionId || !accessToken) throw new Error("Voice session is unavailable.");
-      if (!supportsAudioStreaming()) return speakRemotely(text, controller);
+      if (!supportsAudioStreaming()) {
+        return speakRemotely(text, controller, onPlaybackStarted);
+      }
 
       const response = await fetch(appRoutes.api.voiceStream, {
         method: "POST",
@@ -262,13 +279,14 @@ export function useCompanionVoice({
       let started = false;
       try {
         await playProgressiveResponse(response, controller.signal, () => {
+          onPlaybackStarted?.();
           started = true;
           setIsPreparing(false);
         });
       } catch (error) {
         releaseAudio();
         if (!started && !controller.signal.aborted) {
-          await speakRemotely(text, controller);
+          await speakRemotely(text, controller, onPlaybackStarted);
           return;
         }
         throw error;
@@ -293,7 +311,7 @@ export function useCompanionVoice({
   );
 
   const speak = useCallback(
-    async (text: string) => {
+    async (text: string, onPlaybackStarted?: () => void) => {
       if (!voiceEnabled || !isSupported || !text.trim()) return;
 
       stopSpeaking();
@@ -303,13 +321,13 @@ export function useCompanionVoice({
       setIsSpeaking(true);
 
       try {
-        await speakStream(text.trim(), controller);
+        await speakStream(text.trim(), controller, onPlaybackStarted);
       } catch (error) {
         releaseAudio();
         if (!controller.signal.aborted) {
           console.warn("Neural voice unavailable; using browser fallback.", error);
           setIsPreparing(false);
-          fallbackSpeak(text);
+          fallbackSpeak(text, onPlaybackStarted);
         }
       } finally {
         if (requestControllerRef.current === controller) {
