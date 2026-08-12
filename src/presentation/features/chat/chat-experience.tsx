@@ -309,6 +309,7 @@ export function ChatExperience() {
     enabled: voiceEnabled,
     resetKey: companionId,
     speak,
+    stopSpeaking,
   });
 
   if (isLoading && !state.setupError) {

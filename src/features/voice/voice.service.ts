@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
-import { EdgeTTS } from "edge-tts-universal";
+import { Communicate, EdgeTTS } from "edge-tts-universal";
 
 import { type CompanionId } from "@/features/persona";
 import { getRedisClient } from "@/infrastructure/redis/client";
@@ -31,7 +31,16 @@ function languageForText(text: string) {
 
 function voiceForText(companionId: CompanionId, text: string) {
   const language = languageForText(text);
-  return voiceByCompanionAndLanguage[companionId][language] ?? voiceByCompanionAndLanguage[companionId]["en-US"];
+  return (
+    voiceByCompanionAndLanguage[companionId][language] ??
+    voiceByCompanionAndLanguage[companionId]["en-US"]
+  );
+}
+
+function prosodyForCompanion(companionId: CompanionId) {
+  return companionId === "rina"
+    ? { rate: "+3%", pitch: "+2Hz", volume: "+0%" }
+    : { rate: "-3%", pitch: "-2Hz", volume: "+0%" };
 }
 
 function cacheKey(input: VoiceSynthesisInput, voice: string) {
@@ -74,12 +83,7 @@ export async function synthesizeCompanionVoice(input: VoiceSynthesisInput): Prom
     };
   }
 
-  const isRina = input.companionId === "rina";
-  const synthesis = await new EdgeTTS(text, voice, {
-    rate: isRina ? "+3%" : "-3%",
-    pitch: isRina ? "+2Hz" : "-2Hz",
-    volume: "+0%",
-  }).synthesize();
+  const synthesis = await new EdgeTTS(text, voice, prosodyForCompanion(input.companionId)).synthesize();
   const audioBase64 = Buffer.from(await synthesis.audio.arrayBuffer()).toString("base64");
   await cacheAudio(key, audioBase64);
 
@@ -90,4 +94,40 @@ export async function synthesizeCompanionVoice(input: VoiceSynthesisInput): Prom
     cacheHit: false,
     mimeType: "audio/mpeg",
   };
+}
+
+export async function* streamCompanionVoice(
+  input: VoiceSynthesisInput,
+): AsyncGenerator<Uint8Array, void, unknown> {
+  const text = input.text.trim();
+  const voice = voiceForText(input.companionId, text);
+  const key = cacheKey({ ...input, text }, voice);
+  const cachedAudio = await getCachedAudio(key);
+
+  if (cachedAudio) {
+    yield Buffer.from(cachedAudio, "base64");
+    return;
+  }
+
+  const chunks: Buffer[] = [];
+  let completed = false;
+
+  try {
+    const communicate = new Communicate(text, {
+      voice,
+      ...prosodyForCompanion(input.companionId),
+    });
+
+    for await (const chunk of communicate.stream()) {
+      if (chunk.type !== "audio" || !chunk.data?.length) continue;
+      const audioChunk = Buffer.from(chunk.data);
+      chunks.push(audioChunk);
+      yield audioChunk;
+    }
+    completed = true;
+  } finally {
+    if (completed && chunks.length > 0) {
+      await cacheAudio(key, Buffer.concat(chunks).toString("base64"));
+    }
+  }
 }

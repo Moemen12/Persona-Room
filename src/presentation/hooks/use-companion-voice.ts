@@ -31,6 +31,14 @@ async function errorMessageFromResponse(response: Response) {
   }
 }
 
+function supportsAudioStreaming() {
+  return (
+    typeof window !== "undefined" &&
+    typeof MediaSource !== "undefined" &&
+    MediaSource.isTypeSupported("audio/mpeg")
+  );
+}
+
 export function useCompanionVoice({
   companionId,
   sessionId,
@@ -133,6 +141,115 @@ export function useCompanionVoice({
     [accessToken, companionId, playAudioBuffer, sessionId],
   );
 
+  const playProgressiveResponse = useCallback(
+    async (response: Response, onPlaybackStarted: () => void) => {
+      if (!response.body || !supportsAudioStreaming()) {
+        throw new Error("Progressive audio is unavailable.");
+      }
+
+      const mediaSource = new MediaSource();
+      const objectUrl = URL.createObjectURL(mediaSource);
+      const audio = new Audio();
+      audio.preload = "auto";
+      audio.src = objectUrl;
+      objectUrlRef.current = objectUrl;
+      audioRef.current = audio;
+
+      const playbackEnded = new Promise<void>((resolve, reject) => {
+        audio.onended = () => resolve();
+        audio.onerror = () => reject(new Error("Progressive audio playback failed."));
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        const handleOpen = () => resolve();
+        mediaSource.addEventListener("sourceopen", handleOpen, { once: true });
+        mediaSource.addEventListener(
+          "error",
+          () => reject(new Error("Progressive audio source failed.")),
+          { once: true },
+        );
+      });
+
+      const sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+      const reader = response.body.getReader();
+      let started = false;
+
+      const appendChunk = (chunk: Uint8Array) =>
+        new Promise<void>((resolve, reject) => {
+          const appendable = chunk.slice().buffer;
+          const handleUpdateEnd = () => resolve();
+          sourceBuffer.addEventListener("updateend", handleUpdateEnd, { once: true });
+          try {
+            sourceBuffer.appendBuffer(appendable);
+          } catch (error) {
+            sourceBuffer.removeEventListener("updateend", handleUpdateEnd);
+            reject(error instanceof Error ? error : new Error("Audio append failed."));
+          }
+        });
+
+      try {
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          await appendChunk(next.value);
+          if (!started) {
+            await audio.play();
+            started = true;
+            onPlaybackStarted();
+          }
+        }
+
+        if (mediaSource.readyState === "open") {
+          mediaSource.endOfStream();
+        }
+        await playbackEnded;
+      } finally {
+        reader.releaseLock();
+        if (!started) releaseAudio();
+      }
+    },
+    [releaseAudio],
+  );
+
+  const speakStream = useCallback(
+    async (text: string, controller: AbortController) => {
+      if (!sessionId || !accessToken) throw new Error("Voice session is unavailable.");
+      if (!supportsAudioStreaming()) return speakRemotely(text, controller);
+
+      const response = await fetch(appRoutes.api.voiceStream, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ accessToken, sessionId, companionId, text: text.trim() }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(await errorMessageFromResponse(response));
+
+      let started = false;
+      try {
+        await playProgressiveResponse(response, () => {
+          started = true;
+          setIsPreparing(false);
+        });
+      } catch (error) {
+        releaseAudio();
+        if (!started && !controller.signal.aborted) {
+          await speakRemotely(text, controller);
+          return;
+        }
+        throw error;
+      }
+    },
+    [
+      accessToken,
+      companionId,
+      playProgressiveResponse,
+      releaseAudio,
+      sessionId,
+      speakRemotely,
+    ],
+  );
+
   const setVoiceEnabled = useCallback(
     (enabled: boolean) => {
       setVoiceEnabledState(enabled);
@@ -152,7 +269,7 @@ export function useCompanionVoice({
       setIsSpeaking(true);
 
       try {
-        await speakRemotely(text.trim(), controller);
+        await speakStream(text.trim(), controller);
       } catch (error) {
         releaseAudio();
         if (!controller.signal.aborted) {
@@ -167,7 +284,7 @@ export function useCompanionVoice({
         if (!controller.signal.aborted) setIsPreparing(false);
       }
     },
-    [fallbackSpeak, isSupported, releaseAudio, speakRemotely, stopSpeaking, voiceEnabled],
+    [fallbackSpeak, isSupported, releaseAudio, speakStream, stopSpeaking, voiceEnabled],
   );
 
   useEffect(() => {
