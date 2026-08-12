@@ -17,6 +17,7 @@ import { useChatProactivity } from "@/presentation/hooks/use-chat-proactivity";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 import { useMountEffect } from "@/presentation/hooks/use-mount-effect";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
+import { formatChatError } from "@/presentation/lib/chat-error";
 
 import { ChatComposer } from "./chat-composer";
 import { ChatHeader } from "./chat-header";
@@ -59,6 +60,7 @@ type ChatClientAction =
   | { type: "assistant-response-pending" }
   | { type: "assistant-response-started"; assistantId: string }
   | { type: "assistant-playback-started"; assistantId: string }
+  | { type: "assistant-playback-timeout"; assistantId: string }
   | { type: "assistant-narration-completed"; assistantId: string }
   | { type: "companion-updated"; bootstrap: SessionBootstrap; mood: PersonaMood };
 
@@ -107,6 +109,13 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
     case "assistant-playback-started":
       return state.narration.assistantId === action.assistantId
         ? { ...state, narration: { ...state.narration, started: true, waiting: true } }
+        : state;
+    case "assistant-playback-timeout":
+      return state.narration.assistantId === action.assistantId
+        ? {
+            ...state,
+            narration: { ...state.narration, completed: true, waiting: false },
+          }
         : state;
     case "assistant-narration-completed":
       return state.narration.assistantId === action.assistantId
@@ -344,6 +353,7 @@ export function ChatExperience() {
 
   const isLoading = !state.identity && !state.setupError;
   const isStreaming = status === "submitted" || status === "streaming";
+  const visibleChatError = error ? formatChatError(error) : state.setupError;
   const { proactiveHint } = useChatProactivity({
     messages,
     isStreaming,
@@ -357,6 +367,10 @@ export function ChatExperience() {
   );
   const handleAssistantPlaybackStarted = useCallback(
     (assistantId: string) => dispatch({ type: "assistant-playback-started", assistantId }),
+    [],
+  );
+  const handleAssistantPlaybackTimeout = useCallback(
+    (assistantId: string) => dispatch({ type: "assistant-playback-timeout", assistantId }),
     [],
   );
   const handleNarrationCompleted = useCallback(
@@ -373,6 +387,7 @@ export function ChatExperience() {
     stopSpeaking,
     onAssistantResponseStarted: handleAssistantResponseStarted,
     onAssistantPlaybackStarted: handleAssistantPlaybackStarted,
+    onAssistantPlaybackTimeout: handleAssistantPlaybackTimeout,
     onNarrationCompleted: handleNarrationCompleted,
   });
 
@@ -436,9 +451,9 @@ export function ChatExperience() {
               voiceSyncEnabled={voiceEnabled && isVoiceSupported && !error}
             />
 
-            {(error || state.setupError) && (
+            {visibleChatError && (
               <div className="error-message error-message--actionable" role="alert">
-                <span>{error?.message ?? state.setupError}</span>
+                <span>{visibleChatError}</span>
                 {error && (
                   <button type="button" onClick={() => clearError()}>
                     Try again

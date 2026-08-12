@@ -8,6 +8,8 @@ interface SpeakOptions {
   onPlaybackFinished?: () => void;
 }
 
+const VOICE_GATE_TIMEOUT_MS = 8_000;
+
 interface UseAutoSpeakOptions {
   messages: UIMessage[];
   isStreaming: boolean;
@@ -17,6 +19,7 @@ interface UseAutoSpeakOptions {
   stopSpeaking?: () => void;
   onAssistantResponseStarted?: (assistantId: string) => void;
   onAssistantPlaybackStarted?: (assistantId: string) => void;
+  onAssistantPlaybackTimeout?: (assistantId: string) => void;
   onNarrationCompleted?: (assistantId: string) => void;
 }
 
@@ -41,6 +44,7 @@ export function useAutoSpeak({
   stopSpeaking,
   onAssistantResponseStarted,
   onAssistantPlaybackStarted,
+  onAssistantPlaybackTimeout,
   onNarrationCompleted,
 }: UseAutoSpeakOptions) {
   const initializedRef = useRef(false);
@@ -51,6 +55,7 @@ export function useAutoSpeak({
   const previousEnabledRef = useRef(enabled);
   const requestGenerationRef = useRef(0);
   const isPlaybackActiveRef = useRef(false);
+  const playbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     const latestAssistant = [...messages]
@@ -65,6 +70,8 @@ export function useAutoSpeak({
       spokenAssistantIdRef.current = undefined;
       requestGenerationRef.current += 1;
       isPlaybackActiveRef.current = false;
+      if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
+      playbackTimeoutRef.current = undefined;
       stopSpeaking?.();
       return;
     }
@@ -72,6 +79,8 @@ export function useAutoSpeak({
     if (!enabled && previousEnabledRef.current) {
       requestGenerationRef.current += 1;
       isPlaybackActiveRef.current = false;
+      if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
+      playbackTimeoutRef.current = undefined;
       stopSpeaking?.();
     }
     previousEnabledRef.current = enabled;
@@ -116,12 +125,25 @@ export function useAutoSpeak({
       if (settled || generation !== requestGenerationRef.current) return;
       settled = true;
       isPlaybackActiveRef.current = false;
+      if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
+      playbackTimeoutRef.current = undefined;
       onNarrationCompleted?.(latestAssistant.id);
     };
 
+    playbackTimeoutRef.current = setTimeout(() => {
+      if (settled || generation !== requestGenerationRef.current) return;
+      onAssistantPlaybackTimeout?.(latestAssistant.id);
+      stopSpeaking?.();
+      settle();
+    }, VOICE_GATE_TIMEOUT_MS);
+
     try {
       const result = speak(responseText, {
-        onPlaybackStarted: () => onAssistantPlaybackStarted?.(latestAssistant.id),
+        onPlaybackStarted: () => {
+          if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
+          playbackTimeoutRef.current = undefined;
+          onAssistantPlaybackStarted?.(latestAssistant.id);
+        },
         onPlaybackFinished: settle,
       });
       if (result instanceof Promise) void result.catch(settle);
@@ -133,6 +155,7 @@ export function useAutoSpeak({
     isStreaming,
     messages,
     onAssistantPlaybackStarted,
+    onAssistantPlaybackTimeout,
     onAssistantResponseStarted,
     onNarrationCompleted,
     resetKey,
