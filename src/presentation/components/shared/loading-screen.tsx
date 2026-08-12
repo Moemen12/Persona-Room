@@ -1,28 +1,33 @@
-import { LoaderCircle, Radio, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 export function LoadingScreen() {
   return (
-    <main className="persona-shell flex items-center justify-center">
-      <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
-      <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
+    <main className="persona-shell flex flex-col items-center justify-center text-center overflow-hidden">
+      <div className="ambient-orb ambient-orb--violet animate-pulse" aria-hidden="true" />
+      <div className="ambient-orb ambient-orb--lavender animate-pulse" aria-hidden="true" />
 
-      <div className="relative z-10 grid text-center gap-4 max-w-[360px] p-8 rounded-[30px] border border-[var(--line)] bg-[var(--surface)] backdrop-blur-md shadow-[var(--shadow)]">
-        <div className="mx-auto grid w-[48px] h-[48px] place-items-center rounded-2xl text-[var(--violet-bright)] border border-[var(--line-strong)] bg-[rgba(124,76,222,0.17)] shadow-[0_0_32px_rgba(138,88,246,0.25)]">
-          <Sparkles aria-hidden="true" size={22} />
+      <div className="relative z-10 flex flex-col items-center gap-6 max-w-md px-6">
+        <div className="relative flex items-center justify-center w-20 h-20 rounded-full bg-[rgba(138,88,246,0.15)] border border-[rgba(255,255,255,0.1)] shadow-[0_0_50px_rgba(138,88,246,0.3)] animate-bounce">
+          <div className="absolute inset-0 rounded-full border border-[var(--violet-bright)] opacity-50 animate-ping" />
+          <Sparkles className="text-[var(--lavender)]" size={32} />
         </div>
-        <div className="grid gap-1">
-          <span className="eyebrow justify-center">
-            <Radio aria-hidden="true" size={14} />
-            <span>PERSONA ROOM</span>
+
+        <div className="grid gap-2">
+          <span className="eyebrow justify-center tracking-widest text-[var(--lavender)]">
+            PERSONA ROOM
           </span>
-          <h2 className="text-white text-xl font-bold tracking-tight">Tuning Frequencies...</h2>
-          <p className="text-[var(--muted)] text-sm leading-relaxed">
-            Establishing a secure digital connection to the studio.
+          <h2 className="text-white text-3xl font-bold tracking-tight">
+            We’ve been waiting for you...
+          </h2>
+          <p className="text-[var(--muted)] text-sm max-w-xs mx-auto leading-relaxed">
+            Lighting the candles, checking the atmosphere, and getting everything ready for your conversation.
           </p>
         </div>
-        <div className="flex items-center justify-center gap-2 mt-2 text-[var(--violet-bright)] text-xs font-semibold">
-          <LoaderCircle aria-hidden="true" size={16} className="spin" />
-          <span>Synchronizing memory...</span>
+
+        <div className="flex items-center gap-2 mt-4">
+          <span className="w-2 h-2 rounded-full bg-[var(--violet-bright)] animate-bounce" style={{ animationDelay: "0ms" }} />
+          <span className="w-2 h-2 rounded-full bg-[var(--violet-bright)] animate-bounce" style={{ animationDelay: "150ms" }} />
+          <span className="w-2 h-2 rounded-full bg-[var(--violet-bright)] animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
       </div>
     </main>
