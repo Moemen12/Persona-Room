@@ -45,6 +45,11 @@ export function ChatHeader({
         <span className="persona-header__channel">private afterglow</span>
       </div>
       <div className="persona-header__actions">
+        {isVoicePreparing ? (
+          <span className="persona-header__voice-status" role="status" aria-live="polite">
+            Warming voice…
+          </span>
+        ) : null}
         <button
           className="icon-button"
           type="button"
@@ -62,6 +67,7 @@ export function ChatHeader({
           onClick={onToggleVoice}
           disabled={!isVoiceSupported}
           aria-pressed={voiceEnabled}
+          aria-busy={isVoicePreparing}
           aria-label={
             !isVoiceSupported
               ? "Neural voice is unavailable"

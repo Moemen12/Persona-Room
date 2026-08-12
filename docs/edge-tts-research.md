@@ -21,3 +21,14 @@ Use `edge-tts-universal` as a server-side dependency, protect `/api/voice` with 
 ## Local smoke-check
 
 The local homepage loaded successfully with the new voice control rendered in the chat header. In the sandbox browser, Supabase environment settings were unavailable, so the session bootstrap failed and the control correctly displayed `Browser voice is unavailable`; this is an environment/configuration state, not a TypeScript or build failure. The production build includes `/api/voice` successfully.
+
+## Kokoro.js and Hybrid Voice Findings
+
+Verified from the official `kokoro-js` package documentation and the ONNX model card: Kokoro.js runs locally through Transformers.js, supports WebGPU/WASM, and offers English voices such as `af_bella` and `am_michael`. The documented voice list is English (American and British) and does not include Korean or Arabic voices. The quantized model is approximately 92 MB; the full fp32 model is substantially larger. The package supports streaming generation, but local browser generation should be isolated in a Web Worker and loaded only after voice opt-in or during idle time.
+
+Persona Room therefore uses a hybrid policy: Kokoro local neural synthesis for English, Edge Neural server synthesis for Korean/Arabic, and browser Speech Synthesis as the final fallback. The local model is not downloaded during initial page render, respects `navigator.connection.saveData` and slow-network signals, and chooses WebGPU when available or quantized WASM otherwise.
+
+Sources:
+- https://www.npmjs.com/package/kokoro-js
+- https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX
+- https://huggingface.co/posts/Xenova/503648859052804

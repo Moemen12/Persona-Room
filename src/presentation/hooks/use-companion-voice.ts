@@ -22,11 +22,28 @@ interface VoiceResponse {
   };
 }
 
-interface LocalTts {
-  generate: (
-    text: string,
-    options: { voice: "af_bella" | "am_michael"; speed: number },
-  ) => Promise<{ toWav: () => ArrayBuffer }>;
+type LocalVoiceWorkerRequest =
+  | { type: "prepare"; requestId: number }
+  | { type: "synthesize"; requestId: number; text: string; companionId: CompanionId };
+
+type LocalVoiceWorkerResponse =
+  | { type: "status"; requestId: number; status: "loading" | "ready"; progress?: number }
+  | { type: "audio"; requestId: number; audioBuffer: ArrayBuffer }
+  | { type: "error"; requestId: number; message: string };
+
+type PendingWorkerRequest = {
+  type: LocalVoiceWorkerRequest["type"];
+  resolve: (audioBuffer: ArrayBuffer | null) => void;
+  reject: (error: Error) => void;
+};
+
+async function errorMessageFromResponse(response: Response) {
+  try {
+    const payload = (await response.json()) as VoiceResponse;
+    return payload.error?.message ?? "Voice generation failed.";
+  } catch {
+    return "Voice generation failed.";
+  }
 }
 
 function isEnglishText(text: string) {
@@ -40,43 +57,89 @@ export function useCompanionVoice({
 }: UseCompanionVoiceOptions) {
   const hasBrowserFallback =
     typeof window !== "undefined" && typeof window.speechSynthesis?.speak === "function";
+  const hasLocalWorker = typeof window !== "undefined" && typeof Worker === "function";
+  const connection =
+    typeof navigator !== "undefined"
+      ? (navigator as Navigator & {
+          connection?: { saveData?: boolean; effectiveType?: string };
+        }).connection
+      : undefined;
+  const shouldUseLocalWorker =
+    hasLocalWorker &&
+    !connection?.saveData &&
+    connection?.effectiveType !== "slow-2g" &&
+    connection?.effectiveType !== "2g";
   const isSupported =
     typeof window !== "undefined" &&
-    (typeof window.Audio === "function" || hasBrowserFallback);
+    (typeof window.Audio === "function" || hasBrowserFallback || hasLocalWorker);
   const [voiceEnabled, setVoiceEnabledState] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
-  const localTtsRef = useRef<LocalTts | null>(null);
-  const localTtsPromiseRef = useRef<Promise<LocalTts> | null>(null);
-  const speechRequestIdRef = useRef(0);
+  const workerRef = useRef<Worker | null>(null);
+  const workerPendingRef = useRef<Map<number, PendingWorkerRequest>>(new Map());
+  const workerRequestIdRef = useRef(0);
+  const activeRequestIdRef = useRef(0);
   const requestControllerRef = useRef<AbortController | null>(null);
 
-  const getLocalTts = useCallback(async () => {
-    if (localTtsRef.current) return localTtsRef.current;
-    if (localTtsPromiseRef.current) return localTtsPromiseRef.current;
+  const getWorker = useCallback(() => {
+    if (!shouldUseLocalWorker) throw new Error("Local voice workers are unavailable on this connection.");
+    if (workerRef.current) return workerRef.current;
 
-    const hasWebGpu = typeof navigator !== "undefined" && "gpu" in navigator;
-    const promise = import("kokoro-js")
-      .then(({ KokoroTTS }) =>
-        KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
-          dtype: hasWebGpu ? "fp32" : "q8",
-          device: hasWebGpu ? "webgpu" : "wasm",
-        }),
-      )
-      .then((tts) => {
-        localTtsRef.current = tts as unknown as LocalTts;
-        return localTtsRef.current;
+    const worker = new Worker(new URL("../workers/kokoro-voice.worker.ts", import.meta.url), {
+      type: "module",
+    });
+    worker.addEventListener("message", (event: MessageEvent<LocalVoiceWorkerResponse>) => {
+      const response = event.data;
+      if (response.requestId === activeRequestIdRef.current && response.type === "status") {
+        setIsPreparing(response.status === "loading");
+      }
+
+      const pending = workerPendingRef.current.get(response.requestId);
+      if (!pending) return;
+
+      if (response.type === "status" && response.status === "ready" && pending.type === "prepare") {
+        workerPendingRef.current.delete(response.requestId);
+        pending.resolve(null);
+      } else if (response.type === "audio" && pending.type === "synthesize") {
+        workerPendingRef.current.delete(response.requestId);
+        pending.resolve(response.audioBuffer);
+      } else if (response.type === "error") {
+        workerPendingRef.current.delete(response.requestId);
+        pending.reject(new Error(response.message));
+      }
+    });
+    worker.addEventListener("error", (event) => {
+      const error = new Error(event.message || "Local neural voice worker failed.");
+      for (const pending of workerPendingRef.current.values()) pending.reject(error);
+      workerPendingRef.current.clear();
+      workerRef.current = null;
+      setIsPreparing(false);
+    });
+    workerRef.current = worker;
+    return worker;
+  }, [shouldUseLocalWorker]);
+
+  const requestLocalVoice = useCallback(
+    (request: LocalVoiceWorkerRequest) => {
+      const worker = getWorker();
+      return new Promise<ArrayBuffer | null>((resolve, reject) => {
+        workerPendingRef.current.set(request.requestId, {
+          type: request.type,
+          resolve,
+          reject,
+        });
+        try {
+          worker.postMessage(request);
+        } catch (error) {
+          workerPendingRef.current.delete(request.requestId);
+          reject(error instanceof Error ? error : new Error("Local neural voice request failed."));
+        }
       });
-
-    localTtsPromiseRef.current = promise;
-    try {
-      return await promise;
-    } finally {
-      localTtsPromiseRef.current = null;
-    }
-  }, []);
+    },
+    [getWorker],
+  );
 
   const fallbackSpeak = useCallback(
     (text: string) => {
@@ -113,11 +176,12 @@ export function useCompanionVoice({
   }, []);
 
   const stopSpeaking = useCallback(() => {
-    speechRequestIdRef.current += 1;
+    activeRequestIdRef.current = ++workerRequestIdRef.current;
     requestControllerRef.current?.abort();
     requestControllerRef.current = null;
     if (hasBrowserFallback) window.speechSynthesis.cancel();
     releaseAudio();
+    setIsPreparing(false);
     setIsSpeaking(false);
   }, [hasBrowserFallback, releaseAudio]);
 
@@ -141,24 +205,35 @@ export function useCompanionVoice({
     [releaseAudio],
   );
 
+  const warmLocalVoice = useCallback(async () => {
+    if (!shouldUseLocalWorker) return;
+    const requestId = ++workerRequestIdRef.current;
+    activeRequestIdRef.current = requestId;
+    setIsPreparing(true);
+    try {
+      await requestLocalVoice({ type: "prepare", requestId });
+    } finally {
+      if (activeRequestIdRef.current === requestId) setIsPreparing(false);
+    }
+  }, [requestLocalVoice, shouldUseLocalWorker]);
+
   const speakLocally = useCallback(
     async (text: string, requestId: number) => {
       setIsPreparing(true);
       try {
-        const tts = await getLocalTts();
-        if (requestId !== speechRequestIdRef.current) return;
-
-        const audio = await tts.generate(text, {
-          voice: companionId === "rina" ? "af_bella" : "am_michael",
-          speed: companionId === "rina" ? 1.03 : 0.97,
+        const audioBuffer = await requestLocalVoice({
+          type: "synthesize",
+          requestId,
+          text,
+          companionId,
         });
-        if (requestId !== speechRequestIdRef.current) return;
-        await playAudioBuffer(audio.toWav(), "audio/wav");
+        if (!audioBuffer || requestId !== activeRequestIdRef.current) return;
+        await playAudioBuffer(audioBuffer, "audio/wav");
       } finally {
-        setIsPreparing(false);
+        if (activeRequestIdRef.current === requestId) setIsPreparing(false);
       }
     },
-    [companionId, getLocalTts, playAudioBuffer],
+    [companionId, playAudioBuffer, requestLocalVoice],
   );
 
   const speakRemotely = useCallback(
@@ -171,10 +246,9 @@ export function useCompanionVoice({
         body: JSON.stringify({ accessToken, sessionId, companionId, text: text.trim() }),
         signal: controller.signal,
       });
+      if (!response.ok) throw new Error(await errorMessageFromResponse(response));
       const payload = (await response.json()) as VoiceResponse;
-      if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Voice generation failed.");
-      }
+      if (!payload.data) throw new Error("Voice generation failed.");
 
       const binary = atob(payload.data.audioBase64);
       const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
@@ -183,14 +257,24 @@ export function useCompanionVoice({
     [accessToken, companionId, playAudioBuffer, sessionId],
   );
 
-  const warmLocalVoice = useCallback(async () => {
-    setIsPreparing(true);
-    try {
-      await getLocalTts();
-    } finally {
-      setIsPreparing(false);
+  const scheduleWarmLocalVoice = useCallback(() => {
+    if (!shouldUseLocalWorker || typeof window === "undefined") return;
+
+    const run = () => {
+      void warmLocalVoice().catch((error) => {
+        console.warn("Local neural voice preparation failed; remote fallback remains available.", error);
+      });
+    };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+    };
+
+    if (idleWindow.requestIdleCallback) {
+      idleWindow.requestIdleCallback(run, { timeout: 1500 });
+    } else {
+      window.setTimeout(run, 120);
     }
-  }, [getLocalTts]);
+  }, [shouldUseLocalWorker, warmLocalVoice]);
 
   const setVoiceEnabled = useCallback(
     (enabled: boolean) => {
@@ -200,13 +284,9 @@ export function useCompanionVoice({
         return;
       }
 
-      if (typeof window !== "undefined") {
-        void warmLocalVoice().catch((error) => {
-          console.warn("Local neural voice preparation failed; remote fallback remains available.", error);
-        });
-      }
+      scheduleWarmLocalVoice();
     },
-    [stopSpeaking, warmLocalVoice],
+    [scheduleWarmLocalVoice, stopSpeaking],
   );
 
   const speak = useCallback(
@@ -214,20 +294,21 @@ export function useCompanionVoice({
       if (!voiceEnabled || !isSupported || !text.trim()) return;
 
       stopSpeaking();
-      const requestId = speechRequestIdRef.current;
+      const requestId = ++workerRequestIdRef.current;
+      activeRequestIdRef.current = requestId;
       const controller = new AbortController();
       requestControllerRef.current = controller;
       setIsSpeaking(true);
 
       try {
-        if (isEnglishText(text)) {
+        if (isEnglishText(text) && shouldUseLocalWorker) {
           await speakLocally(text.trim(), requestId);
         } else {
           await speakRemotely(text.trim(), controller);
         }
       } catch (error) {
         releaseAudio();
-        if (!controller.signal.aborted && requestId === speechRequestIdRef.current) {
+        if (!controller.signal.aborted && requestId === activeRequestIdRef.current) {
           console.warn("Neural voice unavailable; using browser fallback.", error);
           fallbackSpeak(text);
         }
@@ -237,10 +318,27 @@ export function useCompanionVoice({
         }
       }
     },
-    [fallbackSpeak, isSupported, releaseAudio, speakLocally, speakRemotely, stopSpeaking, voiceEnabled],
+    [
+      fallbackSpeak,
+      shouldUseLocalWorker,
+      isSupported,
+      releaseAudio,
+      speakLocally,
+      speakRemotely,
+      stopSpeaking,
+      voiceEnabled,
+    ],
   );
 
-  useEffect(() => stopSpeaking, [stopSpeaking]);
+  useEffect(() => {
+    const pendingRequests = workerPendingRef.current;
+    return () => {
+      stopSpeaking();
+      workerRef.current?.terminate();
+      workerRef.current = null;
+      pendingRequests.clear();
+    };
+  }, [stopSpeaking]);
 
   return {
     isSupported,
