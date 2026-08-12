@@ -47,7 +47,7 @@ export function ChatHeader({
       <div className="persona-header__actions">
         {isVoicePreparing ? (
           <span className="persona-header__voice-status" role="status" aria-live="polite">
-            Warming voice…
+            Preparing voice…
           </span>
         ) : null}
         <button
@@ -72,7 +72,7 @@ export function ChatHeader({
             !isVoiceSupported
               ? "Neural voice is unavailable"
               : isVoicePreparing
-                ? "Preparing local neural voice"
+                ? "Preparing neural audio"
                 : voiceEnabled
                   ? "Mute companion voice"
                   : "Enable companion voice"
@@ -81,8 +81,8 @@ export function ChatHeader({
             !isVoiceSupported
               ? "Neural voice unavailable"
               : isVoicePreparing
-                ? "Preparing local neural voice"
-                : "Free local neural voice"
+                ? "Preparing neural audio"
+                : "Free neural voice"
           }
         >
           {voiceEnabled ? <Mic2 aria-hidden="true" size={16} /> : <VolumeX aria-hidden="true" size={16} />}

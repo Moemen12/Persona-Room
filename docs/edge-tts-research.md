@@ -22,11 +22,11 @@ Use `edge-tts-universal` as a server-side dependency, protect `/api/voice` with 
 
 The local homepage loaded successfully with the new voice control rendered in the chat header. In the sandbox browser, Supabase environment settings were unavailable, so the session bootstrap failed and the control correctly displayed `Browser voice is unavailable`; this is an environment/configuration state, not a TypeScript or build failure. The production build includes `/api/voice` successfully.
 
-## Kokoro.js and Hybrid Voice Findings
+## Kokoro.js Evaluation and Final Decision
 
-Verified from the official `kokoro-js` package documentation and the ONNX model card: Kokoro.js runs locally through Transformers.js, supports WebGPU/WASM, and offers English voices such as `af_bella` and `am_michael`. The documented voice list is English (American and British) and does not include Korean or Arabic voices. The quantized model is approximately 92 MB; the full fp32 model is substantially larger. The package supports streaming generation, but local browser generation should be isolated in a Web Worker and loaded only after voice opt-in or during idle time.
+Kokoro.js was evaluated as a free local English TTS option. Its official package documentation lists English voices and browser execution through Transformers.js with WebGPU/WASM. It does not provide the Korean or Arabic voices required by Persona Room, and its browser model download was observed to reach roughly 195 MB in the local development environment and remain incomplete for many minutes.
 
-Persona Room therefore uses a hybrid policy: Kokoro local neural synthesis for English, Edge Neural server synthesis for Korean/Arabic, and browser Speech Synthesis as the final fallback. The local model is not downloaded during initial page render, respects `navigator.connection.saveData` and slow-network signals, and chooses WebGPU when available or quantized WASM otherwise.
+The local-model approach was rejected for the MVP because the download cost and first-use latency damage the product experience. Persona Room instead keeps neural synthesis server-side through the existing `/api/voice` boundary: the browser receives a small MP3 response, Edge Neural selects English, Korean, or Arabic voices, Upstash caches repeated audio, and browser Speech Synthesis remains the final fallback. The application does not ship Kokoro.js or a large neural model to browsers.
 
 Sources:
 - https://www.npmjs.com/package/kokoro-js
