@@ -2,7 +2,7 @@
 
 import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { type FormEvent, useCallback, useReducer, useState, useActionState, useEffect } from "react";
+import { type FormEvent, useCallback, useReducer, useState, useActionState, useEffect, startTransition } from "react";
 
 import type { RoomBroadcast } from "@/features/audience";
 import type { SessionBootstrap } from "@/features/auth";
@@ -437,7 +437,9 @@ export function ChatExperience() {
     formData.append("accessToken", state.identity.accessToken);
     formData.append("sessionId", state.identity.bootstrap.session.id);
     formData.append("companionId", companionId);
-    runUpdateCompanion(formData);
+    startTransition(() => {
+      runUpdateCompanion(formData);
+    });
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {

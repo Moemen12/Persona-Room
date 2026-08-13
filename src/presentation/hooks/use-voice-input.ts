@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useActionState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useActionState, startTransition } from "react";
 
 import { transcribeAction, type TranscriptionState } from "@/actions/voice.actions";
 
@@ -220,7 +220,9 @@ export function useVoiceInput({
         formData.append("accessToken", accessToken);
         formData.append("sessionId", sessionId);
         formData.append("companionId", companionId);
-        runTranscription(formData);
+        startTransition(() => {
+          runTranscription(formData);
+        });
       };
 
       dispatch({ type: "START_RECORDING" });
