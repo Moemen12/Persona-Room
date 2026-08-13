@@ -8,6 +8,7 @@ import {
   type ConversationLanguage,
   type PersonalityId,
 } from "@/features/persona";
+import { ThemeToggle } from "@/presentation/components/theme-toggle";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 
 interface AudienceHeaderProps {
@@ -37,6 +38,7 @@ export function AudienceHeader({ companionId, language, personalityId, viewerCou
         </span>
       </div>
       <div className="audience-header__actions">
+        <ThemeToggle />
         <div className="audience-viewers" role="status">
           <Users aria-hidden="true" size={14} />
           <span key={viewerCount} className="audience-viewers__label">{audienceLabel(viewerCount)}</span>

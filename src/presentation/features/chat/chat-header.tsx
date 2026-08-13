@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { type PersonaMood } from "@/features/persona";
 import { appRoutes } from "@/infrastructure/config/routes";
+import { ThemeToggle } from "@/presentation/components/theme-toggle";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 
 interface ChatHeaderProps {
@@ -61,6 +62,7 @@ export function ChatHeader({
         <span>{viewerCount} watching</span>
       </div>
       <div className="persona-header__actions">
+        <ThemeToggle />
         <button
           className="icon-button"
           type="button"

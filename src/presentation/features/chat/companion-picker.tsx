@@ -71,7 +71,7 @@ export function CompanionPicker({
           Your companion, language, and personality are locked into this room so the conversation stays consistent.
         </p>
 
-        <div className="companion-picker__section">
+        <div className="companion-picker__section companion-picker__section--companion">
           <div className="companion-picker__section-heading">
             <span className="eyebrow">01 / COMPANION</span>
             <span>Choose who is on the other side.</span>
@@ -101,7 +101,7 @@ export function CompanionPicker({
           </div>
         </div>
 
-        <div className="companion-picker__section">
+        <div className="companion-picker__section companion-picker__section--language">
           <div className="companion-picker__section-heading">
             <span className="eyebrow">02 / LANGUAGE</span>
             <span>The AI will stay in this language.</span>
@@ -126,7 +126,7 @@ export function CompanionPicker({
           </div>
         </div>
 
-        <div className="companion-picker__section">
+        <div className="companion-picker__section companion-picker__section--personality">
           <div className="companion-picker__section-heading">
             <span className="eyebrow">03 / PERSONALITY</span>
             <span>One consistent personality for the whole room.</span>
