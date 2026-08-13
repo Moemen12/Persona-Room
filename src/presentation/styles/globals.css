@@ -1415,3 +1415,27 @@ html[data-theme="light"] .composer__field-top label { color: #51479e; }
 html[data-theme="light"] .composer__send { color: #ffffff; background: #584db5; box-shadow: 0 8px 18px rgba(88, 77, 181, 0.22); }
 html[data-theme="light"] .composer__send:disabled { color: #a2adbb; background: #dbe1e9; box-shadow: none; }
 html[data-theme="light"] .personality-group__heading strong { color: #253142; }
+
+/* Final contrast corrections for the remaining light-mode text surfaces. */
+html[data-theme="light"] .companion-picker__panel h2 {
+  color: #182334;
+}
+html[data-theme="light"] .assistant-typing,
+html[data-theme="light"] .proactive-nudge {
+  border-color: #c4cfdd;
+  background: #eef1f7;
+  color: #253142;
+  box-shadow: 0 6px 16px rgba(39, 53, 72, 0.08);
+}
+html[data-theme="light"] .assistant-typing__spark,
+html[data-theme="light"] .proactive-nudge__spark,
+html[data-theme="light"] .assistant-typing__dots i {
+  color: #584db5;
+  background-color: #584db5;
+  filter: none;
+  box-shadow: none;
+}
+html[data-theme="light"] .assistant-typing__spark,
+html[data-theme="light"] .proactive-nudge__spark {
+  background-color: transparent;
+}
