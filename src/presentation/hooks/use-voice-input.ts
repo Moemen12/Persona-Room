@@ -91,6 +91,7 @@ export function useVoiceInput({
 
   // React 19 Server Action integration
   const [transcription, runTranscription] = useActionState(transcribeAction, initialTranscriptionState);
+  const lastProcessedTranscriptionRef = useRef<TranscriptionState>(initialTranscriptionState);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -126,11 +127,14 @@ export function useVoiceInput({
 
   // Handle successful transcription declaratively
   useEffect(() => {
+    if (transcription === lastProcessedTranscriptionRef.current) return;
+    lastProcessedTranscriptionRef.current = transcription;
+
     if (transcription.status === "success" && transcription.transcript) {
       debug("transcription-completed", transcription.transcript);
       onFinalTranscript(transcription.transcript);
     }
-  }, [transcription.status, transcription.transcript, onFinalTranscript, debug]);
+  }, [transcription, onFinalTranscript, debug]);
 
   // Audio metering effect
   useEffect(() => {

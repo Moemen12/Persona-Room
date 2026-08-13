@@ -81,7 +81,10 @@ type ChatClientAction =
       openSelector: boolean;
     }
   | { type: "set-mood"; mood: PersonaMood }
-  | { type: "set-draft"; draft: string }
+  | {
+      type: "set-draft";
+      draft: string | ((prev: string) => string);
+    }
   | { type: "set-setup-error"; error: string }
   | { type: "set-viewer-count"; count: number }
   | { type: "set-selector-open"; open: boolean }
@@ -118,7 +121,13 @@ function chatClientReducer(
     case "set-mood":
       return { ...state, mood: action.mood };
     case "set-draft":
-      return { ...state, draft: action.draft };
+      return {
+        ...state,
+        draft:
+          typeof action.draft === "function"
+            ? action.draft(state.draft)
+            : action.draft,
+      };
     case "set-setup-error":
       return { ...state, setupError: action.error };
     case "set-viewer-count":

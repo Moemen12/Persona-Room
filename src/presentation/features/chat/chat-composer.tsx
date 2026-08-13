@@ -11,7 +11,7 @@ interface ChatComposerProps {
   draft: string;
   isStreaming: boolean;
   isLoading: boolean;
-  onDraftChange: (draft: string) => void;
+  onDraftChange: (draft: string | ((prev: string) => string)) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   sessionId?: string;
   onStop: () => void;
@@ -34,11 +34,12 @@ export function ChatComposer({
   const companion = COMPANIONS[companionId];
   const handleFinalTranscript = useCallback(
     (transcript: string) => {
-      const nextDraft = `${draft.trim()} ${transcript}`.trim();
-      if (nextDraft.length <= APP_CONFIG.maxMessageCharacters)
-        onDraftChange(nextDraft);
+      onDraftChange(prev => {
+        const nextDraft = `${prev.trim()} ${transcript}`.trim();
+        return nextDraft.length <= APP_CONFIG.maxMessageCharacters ? nextDraft : prev;
+      });
     },
-    [draft, onDraftChange]
+    [onDraftChange]
   );
   const {
     debugEvents,
