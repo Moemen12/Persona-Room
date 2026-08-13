@@ -93,16 +93,16 @@ export function ChatComposer({
         </div>
         {isListening || isTranscribing ? (
           <div
-            className="composer__voice-meter"
+            className={`composer__voice-meter ${isTranscribing ? "composer__voice-meter--processing" : ""}`}
             role="status"
             aria-live="polite"
             aria-label={
-              isTranscribing ? "Transcribing voice" : "Microphone is listening"
+              isTranscribing ? "Processing your voice" : "Microphone is listening"
             }
           >
             <span className="composer__voice-meter-label">
               <span className="presence-pulse" aria-hidden="true" />
-              {isTranscribing ? "Transcribing voice" : ""}
+              {isTranscribing ? "Processing your voice..." : "Listening..."}
             </span>
             {isListening && (
               <span className="composer__voice-bars" aria-hidden="true">
@@ -110,7 +110,8 @@ export function ChatComposer({
                   <i
                     key={index}
                     style={{
-                      height: `${8 + inputLevel * (10 + (index % 4) * 5)}px`,
+                      height: `${6 + inputLevel * (8 + (index % 4) * 4)}px`,
+                      opacity: 0.4 + inputLevel * 0.6,
                     }}
                   />
                 ))}

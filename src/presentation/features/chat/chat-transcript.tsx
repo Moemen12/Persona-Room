@@ -43,7 +43,7 @@ export function ChatTranscript({
   mood: _mood,
   proactiveHint,
   narration,
-  voiceSyncEnabled: _voiceSyncEnabled,
+  voiceSyncEnabled,
 }: ChatTranscriptProps) {
   const companion = COMPANIONS[companionId];
   const latestMessage = messages.at(-1);
@@ -80,27 +80,35 @@ export function ChatTranscript({
             const rawContent = messageText(message);
             const isLatestMessage = message === messages[messages.length - 1];
             const isAssistant = message.role === "assistant";
-            // Render text immediately without voice gating to prevent response stalls
-            const content = rawContent;
-            const bubbleRole = isAssistant ? "assistant" : "user";
-            const bubbleIsStreaming =
-              isLatestMessage &&
-              isAssistant &&
-              isStreaming;
-            const shouldAnimateFreshReply =
-              isLatestMessage &&
-              isAssistant &&
-              narration.assistantId === message.id &&
-              narration.started;
+            
+            // Atomic reveal: If voice is enabled and this is a fresh assistant response,
+            // keep it in a "preparing" state (visible but subtle) until playback starts.
+            const isFreshAssistantResponse = 
+              isAssistant && 
+              isLatestMessage && 
+              !isStreaming && 
+              narration.assistantId === message.id;
+
+            const isWaitingForVoice = 
+              voiceSyncEnabled && 
+              isFreshAssistantResponse && 
+              !narration.started && 
+              !narration.completed;
+
+            const shouldAnimateFreshReply = 
+              isFreshAssistantResponse && 
+              narration.started && 
+              !narration.completed;
 
             return (
               <MessageBubble
                 key={message.id}
-                role={bubbleRole}
-                text={content}
+                role={isAssistant ? "assistant" : "user"}
+                text={rawContent}
                 assistantName={companion.name}
                 animateText={shouldAnimateFreshReply}
-                isStreaming={bubbleIsStreaming}
+                isStreaming={isLatestMessage && isAssistant && isStreaming}
+                isPreparing={isWaitingForVoice}
               />
             );
           })}

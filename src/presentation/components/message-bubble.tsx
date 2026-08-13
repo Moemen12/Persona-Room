@@ -8,6 +8,7 @@ interface MessageBubbleProps {
   text: string;
   createdAt?: string;
   isStreaming?: boolean;
+  isPreparing?: boolean;
   animateText?: boolean;
   assistantName?: string;
 }
@@ -17,6 +18,7 @@ export function MessageBubble({
   text,
   createdAt,
   isStreaming,
+  isPreparing = false,
   animateText = false,
   assistantName = "Rina",
 }: MessageBubbleProps) {
@@ -26,7 +28,7 @@ export function MessageBubble({
     enabled: isAssistant && animateText && Boolean(text),
   });
   return (
-    <article className={`message-bubble message-bubble--${role}`}>
+    <article className={`message-bubble message-bubble--${role} ${isPreparing ? "message-bubble--preparing" : ""}`}>
       {isAssistant && (
         <div className="message-bubble__speaker">
           <Sparkles aria-hidden="true" size={13} strokeWidth={2.5} />
