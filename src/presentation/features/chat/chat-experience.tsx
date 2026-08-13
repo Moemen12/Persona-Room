@@ -9,7 +9,11 @@ import type { SessionBootstrap } from "@/features/auth";
 import { type CompanionId, type PersonaMood } from "@/features/persona";
 import { appRoutes } from "@/infrastructure/config/routes";
 import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
-import { getSafeChatAuth, getSafeCompanionHint, setSafeChatAuth } from "@/lib/storage";
+import {
+  getSafeChatAuth,
+  getSafeCompanionHint,
+  setSafeChatAuth,
+} from "@/lib/storage";
 import { LoadingScreen } from "@/presentation/components/shared/loading-screen";
 import { useAutoSpeak } from "@/presentation/hooks/use-auto-speak";
 import { useCompanionVoice } from "@/presentation/hooks/use-companion-voice";
@@ -43,9 +47,10 @@ async function postSessionBootstrap(accessToken: string, signal: AbortSignal) {
 
 async function readResponseError(response: Response) {
   const payload = (await response.json().catch(() => undefined)) as
-    | { error?: { message?: string } }
-    | undefined;
-  return payload?.error?.message ?? `Session setup failed (${response.status}).`;
+    { error?: { message?: string } } | undefined;
+  return (
+    payload?.error?.message ?? `Session setup failed (${response.status}).`
+  );
 }
 
 interface NarrationState {
@@ -68,7 +73,12 @@ interface ChatClientState {
 }
 
 type ChatClientAction =
-  | { type: "initialized"; identity: IdentityState; mood: PersonaMood; openSelector: boolean }
+  | {
+      type: "initialized";
+      identity: IdentityState;
+      mood: PersonaMood;
+      openSelector: boolean;
+    }
   | { type: "set-mood"; mood: PersonaMood }
   | { type: "set-draft"; draft: string }
   | { type: "set-setup-error"; error: string }
@@ -80,12 +90,19 @@ type ChatClientAction =
   | { type: "assistant-playback-started"; assistantId: string }
   | { type: "assistant-playback-timeout"; assistantId: string }
   | { type: "assistant-narration-completed"; assistantId: string }
-  | { type: "companion-updated"; bootstrap: SessionBootstrap; mood: PersonaMood };
+  | {
+      type: "companion-updated";
+      bootstrap: SessionBootstrap;
+      mood: PersonaMood;
+    };
 
 const CHAT_AUTH_STORAGE_KEY = "persona-room-chat-auth";
 const COMPANION_SELECTION_KEY = "persona-room-companion-selected";
 
-function chatClientReducer(state: ChatClientState, action: ChatClientAction): ChatClientState {
+function chatClientReducer(
+  state: ChatClientState,
+  action: ChatClientAction
+): ChatClientState {
   switch (action.type) {
     case "initialized":
       return {
@@ -126,7 +143,10 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
       };
     case "assistant-playback-started":
       return state.narration.assistantId === action.assistantId
-        ? { ...state, narration: { ...state.narration, started: true, waiting: true } }
+        ? {
+            ...state,
+            narration: { ...state.narration, started: true, waiting: true },
+          }
         : state;
     case "assistant-playback-timeout":
       return state.narration.assistantId === action.assistantId
@@ -145,7 +165,9 @@ function chatClientReducer(state: ChatClientState, action: ChatClientAction): Ch
     case "companion-updated":
       return {
         ...state,
-        identity: state.identity ? { ...state.identity, bootstrap: action.bootstrap } : undefined,
+        identity: state.identity
+          ? { ...state.identity, bootstrap: action.bootstrap }
+          : undefined,
         mood: action.mood,
         narration: emptyNarrationState,
         draft: "",
@@ -190,10 +212,12 @@ function asUiMessage(message: SessionBootstrap["messages"][number]): UIMessage {
 function messageText(message: UIMessage) {
   return message.parts
     .filter(
-      (part): part is Extract<(typeof message.parts)[number], { type: "text" }> =>
-        part.type === "text",
+      (
+        part
+      ): part is Extract<(typeof message.parts)[number], { type: "text" }> =>
+        part.type === "text"
     )
-    .map((part) => part.text)
+    .map(part => part.text)
     .join("");
 }
 
@@ -201,9 +225,12 @@ export function ChatExperience() {
   const [state, dispatch] = useReducer(chatClientReducer, initialChatState);
   const { reaction, triggerReaction } = useAudienceReaction();
   const { play } = useInterfaceSound();
-  const companionId = state.identity?.bootstrap.session.companionId ?? state.hintedCompanionId ?? "rina";
+  const companionId =
+    state.identity?.bootstrap.session.companionId ??
+    state.hintedCompanionId ??
+    "rina";
   const {
-    isSupported:     isVoiceSupported,
+    isSupported: isVoiceSupported,
     voiceEnabled,
     isSpeaking,
     isPreparing: isVoicePreparing,
@@ -223,10 +250,18 @@ export function ChatExperience() {
           api: appRoutes.api.chat,
           body: chatRequestBody,
         }),
-      }),
+      })
   );
 
-  const { messages, setMessages, sendMessage, status, stop, error, clearError } = useChat({
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    stop,
+    error,
+    clearError,
+  } = useChat({
     chat,
     experimental_throttle: 50,
   });
@@ -247,7 +282,10 @@ export function ChatExperience() {
           throw new Error("Anonymous session unavailable");
         }
 
-        let response = await postSessionBootstrap(session.access_token, controller.signal);
+        let response = await postSessionBootstrap(
+          session.access_token,
+          controller.signal
+        );
         if (response.status === 401) {
           const refreshed = await supabase.auth.refreshSession();
           if (refreshed.data.session && !refreshed.error) {
@@ -259,10 +297,15 @@ export function ChatExperience() {
             session = anonymous.data.session;
           }
           if (!session) throw new Error("Anonymous session unavailable");
-          response = await postSessionBootstrap(session.access_token, controller.signal);
+          response = await postSessionBootstrap(
+            session.access_token,
+            controller.signal
+          );
         }
         if (!response.ok) throw new Error(await readResponseError(response));
-        const jsonResult = (await response.json()) as { data: SessionBootstrap };
+        const jsonResult = (await response.json()) as {
+          data: SessionBootstrap;
+        };
         const bootstrap = jsonResult.data;
         if (controller.signal.aborted) return;
         const identity = { bootstrap, accessToken: session.access_token };
@@ -272,18 +315,24 @@ export function ChatExperience() {
           companionId: bootstrap.session.companionId,
         });
         const selectionKey = `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`;
-        const openSelector = window.localStorage.getItem(selectionKey) !== "confirmed";
-        dispatch({ type: "initialized", identity, mood: bootstrap.mood, openSelector });
+        const openSelector =
+          window.localStorage.getItem(selectionKey) !== "confirmed";
+        dispatch({
+          type: "initialized",
+          identity,
+          mood: bootstrap.mood,
+          openSelector,
+        });
         setMessages(bootstrap.messages.map(asUiMessage));
       } catch (initializationError) {
         if (!controller.signal.aborted) {
-            dispatch({
-              type: "set-setup-error",
-              error:
-                initializationError instanceof Error
-                  ? initializationError.message
-                  : "The room could not establish a secure session. Refresh and try again.",
-            });
+          dispatch({
+            type: "set-setup-error",
+            error:
+              initializationError instanceof Error
+                ? initializationError.message
+                : "The room could not establish a secure session. Refresh and try again.",
+          });
           console.error(initializationError);
         }
       }
@@ -294,14 +343,18 @@ export function ChatExperience() {
 
   useRoomRealtime({
     roomId: state.identity?.bootstrap.session.id,
-    onViewerCount: (count) => dispatch({ type: "set-viewer-count", count }),
+    onViewerCount: count => dispatch({ type: "set-viewer-count", count }),
     onEvent: (event: RoomBroadcast) => {
       if (event.type === "companion-changed") return;
       if (event.type === "audience-reaction") {
-        const definition = AUDIENCE_REACTIONS.find((item) => item.value === event.reaction);
+        const definition = AUDIENCE_REACTIONS.find(
+          item => item.value === event.reaction
+        );
         triggerReaction({
           kind: event.reaction,
-          label: definition ? `${definition.emoji} ${definition.label}` : "The room reacted",
+          label: definition
+            ? `${definition.emoji} ${definition.label}`
+            : "The room reacted",
         });
         return;
       }
@@ -313,8 +366,12 @@ export function ChatExperience() {
       }
       const roomMessage = "message" in event ? event.message : undefined;
       if (roomMessage && roomMessage.role === "assistant") {
-        setMessages((current) => {
-          if (current.some((message) => messageText(message) === roomMessage.content)) {
+        setMessages(current => {
+          if (
+            current.some(
+              message => messageText(message) === roomMessage.content
+            )
+          ) {
             return current;
           }
           return [
@@ -336,7 +393,7 @@ export function ChatExperience() {
     if (companionId === currentCompanionId) {
       window.localStorage.setItem(
         `${COMPANION_SELECTION_KEY}:${state.identity.bootstrap.session.id}`,
-        "confirmed",
+        "confirmed"
       );
       dispatch({ type: "set-selector-open", open: false });
       return;
@@ -350,7 +407,10 @@ export function ChatExperience() {
           authorization: `Bearer ${state.identity.accessToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ sessionId: state.identity.bootstrap.session.id, companionId }),
+        body: JSON.stringify({
+          sessionId: state.identity.bootstrap.session.id,
+          companionId,
+        }),
       });
       if (!response.ok) throw new Error("Companion update failed");
       stop();
@@ -360,7 +420,9 @@ export function ChatExperience() {
         headers: { authorization: `Bearer ${state.identity.accessToken}` },
       });
       if (!bootstrapResponse.ok) throw new Error("Companion refresh failed");
-      const bootstrapResult = (await bootstrapResponse.json()) as { data: SessionBootstrap };
+      const bootstrapResult = (await bootstrapResponse.json()) as {
+        data: SessionBootstrap;
+      };
       const bootstrap = bootstrapResult.data;
       setMessages(bootstrap.messages.map(asUiMessage));
       dispatch({ type: "companion-updated", bootstrap, mood: bootstrap.mood });
@@ -371,7 +433,7 @@ export function ChatExperience() {
       });
       window.localStorage.setItem(
         `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`,
-        "confirmed",
+        "confirmed"
       );
       play("share");
     } catch (companionError) {
@@ -401,8 +463,10 @@ export function ChatExperience() {
   const visibleChatError = error ? formatChatError(error) : state.setupError;
   const latestUserSignal = [...messages]
     .reverse()
-    .find((message) => message.role === "user");
-  const recentSignal = latestUserSignal ? messageText(latestUserSignal).slice(0, 84) : undefined;
+    .find(message => message.role === "user");
+  const recentSignal = latestUserSignal
+    ? messageText(latestUserSignal).slice(0, 84)
+    : undefined;
   const { proactiveHint } = useChatProactivity({
     messages,
     isStreaming,
@@ -411,20 +475,24 @@ export function ChatExperience() {
   });
 
   const handleAssistantResponseStarted = useCallback(
-    (assistantId: string) => dispatch({ type: "assistant-response-started", assistantId }),
-    [],
+    (assistantId: string) =>
+      dispatch({ type: "assistant-response-started", assistantId }),
+    []
   );
   const handleAssistantPlaybackStarted = useCallback(
-    (assistantId: string) => dispatch({ type: "assistant-playback-started", assistantId }),
-    [],
+    (assistantId: string) =>
+      dispatch({ type: "assistant-playback-started", assistantId }),
+    []
   );
   const handleAssistantPlaybackTimeout = useCallback(
-    (assistantId: string) => dispatch({ type: "assistant-playback-timeout", assistantId }),
-    [],
+    (assistantId: string) =>
+      dispatch({ type: "assistant-playback-timeout", assistantId }),
+    []
   );
   const handleNarrationCompleted = useCallback(
-    (assistantId: string) => dispatch({ type: "assistant-narration-completed", assistantId }),
-    [],
+    (assistantId: string) =>
+      dispatch({ type: "assistant-narration-completed", assistantId }),
+    []
   );
 
   useAutoSpeak({
@@ -452,12 +520,12 @@ export function ChatExperience() {
       <div className="stage-sweep" aria-hidden="true" />
       <div className="stage-sparkle stage-sparkle--one" aria-hidden="true" />
       <div className="stage-sparkle stage-sparkle--two" aria-hidden="true" />
-      
+
       {state.isSelectorOpen && state.identity ? (
         <CompanionPicker
           currentCompanionId={companionId}
           isChanging={state.isChangingCompanion}
-          onSelect={(id) => void chooseCompanion(id)}
+          onSelect={id => void chooseCompanion(id)}
           onClose={() => dispatch({ type: "set-selector-open", open: false })}
         />
       ) : null}
@@ -483,7 +551,9 @@ export function ChatExperience() {
             isSpeaking={isSpeaking}
             memories={state.identity?.bootstrap.memories ?? []}
             recentSignal={recentSignal}
-            onOpenSelector={() => dispatch({ type: "set-selector-open", open: true })}
+            onOpenSelector={() =>
+              dispatch({ type: "set-selector-open", open: true })
+            }
           />
 
           <section className="chat-card">
@@ -507,7 +577,10 @@ export function ChatExperience() {
             />
 
             {visibleChatError && (
-              <div className="error-message error-message--actionable" role="alert">
+              <div
+                className="error-message error-message--actionable"
+                role="alert"
+              >
                 <span>{visibleChatError}</span>
                 {error && (
                   <button type="button" onClick={() => clearError()}>
@@ -518,13 +591,15 @@ export function ChatExperience() {
             )}
 
             <ChatComposer
+              accessToken={state.identity?.accessToken}
               companionId={companionId}
               draft={state.draft}
               isStreaming={isStreaming}
               isLoading={isLoading}
-              onDraftChange={(draft) => dispatch({ type: "set-draft", draft })}
+              onDraftChange={draft => dispatch({ type: "set-draft", draft })}
               onSubmit={submit}
               onStop={() => stop()}
+              sessionId={state.identity?.bootstrap.session.id}
             />
           </section>
         </div>

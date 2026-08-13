@@ -2,15 +2,20 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
+import { GoogleGenAI } from "@google/genai";
 import { Communicate, EdgeTTS } from "edge-tts-universal";
 
 import { type CompanionId } from "@/features/persona";
 import { getRedisClient } from "@/infrastructure/redis/client";
 import { APP_CONFIG } from "@/lib/config/app";
+import { getServerEnvironment } from "@/infrastructure/shared/env";
 
 import type { VoiceSynthesisInput, VoiceSynthesisResult } from "./voice.types";
 
-const voiceByCompanionAndLanguage: Record<CompanionId, Record<string, string>> = {
+const voiceByCompanionAndLanguage: Record<
+  CompanionId,
+  Record<string, string>
+> = {
   rina: {
     "en-US": "en-US-AvaMultilingualNeural",
     "ko-KR": "ko-KR-SunHiNeural",
@@ -61,13 +66,47 @@ async function getCachedAudio(key: string) {
 
 async function cacheAudio(key: string, audioBase64: string) {
   try {
-    await getRedisClient().set(key, audioBase64, { ex: APP_CONFIG.voiceCacheSeconds });
+    await getRedisClient().set(key, audioBase64, {
+      ex: APP_CONFIG.voiceCacheSeconds,
+    });
   } catch (error) {
-    console.warn("Voice cache write failed; audio remains available for this request.", error);
+    console.warn(
+      "Voice cache write failed; audio remains available for this request.",
+      error
+    );
   }
 }
 
-export async function synthesizeCompanionVoice(input: VoiceSynthesisInput): Promise<VoiceSynthesisResult> {
+export async function transcribeVoiceAudio(input: {
+  audio: File;
+}): Promise<{ transcript: string }> {
+  const audioData = Buffer.from(await input.audio.arrayBuffer()).toString(
+    "base64"
+  );
+  const response = await new GoogleGenAI({
+    apiKey: getServerEnvironment().GEMINI_API_KEY,
+  }).models.generateContent({
+    model: getServerEnvironment().GEMINI_MODEL,
+    contents: [
+      {
+        inlineData: {
+          mimeType: input.audio.type || "audio/webm",
+          data: audioData,
+        },
+      },
+      {
+        text: "Transcribe the spoken words exactly. Return only the transcription, with no quotes, explanation, or additional text. Preserve the speaker's language.",
+      },
+    ],
+  });
+
+  const transcript = (response.text ?? "").trim();
+  return { transcript: transcript.replace(/^['"`]([\s\S]*)['"`]$/u, "$1") };
+}
+
+export async function synthesizeCompanionVoice(
+  input: VoiceSynthesisInput
+): Promise<VoiceSynthesisResult> {
   const text = input.text.trim();
   const voice = voiceForText(input.companionId, text);
   const key = cacheKey({ ...input, text }, voice);
@@ -83,8 +122,14 @@ export async function synthesizeCompanionVoice(input: VoiceSynthesisInput): Prom
     };
   }
 
-  const synthesis = await new EdgeTTS(text, voice, prosodyForCompanion(input.companionId)).synthesize();
-  const audioBase64 = Buffer.from(await synthesis.audio.arrayBuffer()).toString("base64");
+  const synthesis = await new EdgeTTS(
+    text,
+    voice,
+    prosodyForCompanion(input.companionId)
+  ).synthesize();
+  const audioBase64 = Buffer.from(await synthesis.audio.arrayBuffer()).toString(
+    "base64"
+  );
   await cacheAudio(key, audioBase64);
 
   return {
@@ -97,7 +142,7 @@ export async function synthesizeCompanionVoice(input: VoiceSynthesisInput): Prom
 }
 
 export async function* streamCompanionVoice(
-  input: VoiceSynthesisInput,
+  input: VoiceSynthesisInput
 ): AsyncGenerator<Uint8Array, void, unknown> {
   const text = input.text.trim();
   const voice = voiceForText(input.companionId, text);

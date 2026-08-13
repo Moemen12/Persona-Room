@@ -6,18 +6,21 @@ import { APP_CONFIG } from "@/lib/config/app";
 import { useVoiceInput } from "@/presentation/hooks/use-voice-input";
 
 interface ChatComposerProps {
+  accessToken?: string;
   companionId: CompanionId;
   draft: string;
   isStreaming: boolean;
   isLoading: boolean;
   onDraftChange: (draft: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  sessionId?: string;
   onStop: () => void;
 }
 
 const COMPOSER_MAX_HEIGHT = 142;
 
 export function ChatComposer({
+  accessToken,
   companionId,
   draft,
   isStreaming,
@@ -25,15 +28,17 @@ export function ChatComposer({
   onDraftChange,
   onSubmit,
   onStop,
+  sessionId,
 }: ChatComposerProps) {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const companion = COMPANIONS[companionId];
   const handleFinalTranscript = useCallback(
     (transcript: string) => {
       const nextDraft = `${draft.trim()} ${transcript}`.trim();
-      if (nextDraft.length <= APP_CONFIG.maxMessageCharacters) onDraftChange(nextDraft);
+      if (nextDraft.length <= APP_CONFIG.maxMessageCharacters)
+        onDraftChange(nextDraft);
     },
-    [draft, onDraftChange],
+    [draft, onDraftChange]
   );
   const {
     debugEvents,
@@ -42,14 +47,21 @@ export function ChatComposer({
     interimTranscript,
     isListening,
     isSupported: isVoiceInputSupported,
+    isTranscribing,
     startListening,
     stopListening,
-  } = useVoiceInput({ onFinalTranscript: handleFinalTranscript });
+  } = useVoiceInput({
+    accessToken,
+    companionId,
+    onFinalTranscript: handleFinalTranscript,
+    sessionId,
+  });
 
   const resizeComposer = (textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
-    textarea.style.overflowY = textarea.scrollHeight > COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
+    textarea.style.overflowY =
+      textarea.scrollHeight > COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
   };
 
   return (
@@ -58,9 +70,15 @@ export function ChatComposer({
         <div className="composer__field-top">
           <label htmlFor="message-input">Message {companion.name}</label>
           <div className="composer__meta">
-            <span>{draft.length}/{APP_CONFIG.maxMessageCharacters}</span>
+            <span>
+              {draft.length}/{APP_CONFIG.maxMessageCharacters}
+            </span>
             {isStreaming ? (
-              <span className="composer__thinking" role="status" aria-live="polite">
+              <span
+                className="composer__thinking"
+                role="status"
+                aria-live="polite"
+              >
                 <span className="presence-pulse" aria-hidden="true" />
                 {companion.name} is thinking
               </span>
@@ -73,17 +91,35 @@ export function ChatComposer({
           </div>
         </div>
         {isListening ? (
-          <div className="composer__voice-meter" role="status" aria-live="polite" aria-label="Microphone is listening">
-            <span className="composer__voice-meter-label"><span className="presence-pulse" aria-hidden="true" /> Listening live</span>
+          <div
+            className="composer__voice-meter"
+            role="status"
+            aria-live="polite"
+            aria-label="Microphone is listening"
+          >
+            <span className="composer__voice-meter-label">
+              {" "}
+              <span className="presence-pulse" aria-hidden="true" />{" "}
+              {isTranscribing ? "Transcribing voice" : "Listening live"}
+            </span>
             <span className="composer__voice-bars" aria-hidden="true">
               {Array.from({ length: 12 }, (_, index) => (
-                <i key={index} style={{ height: `${8 + inputLevel * (10 + (index % 4) * 5)}px` }} />
+                <i
+                  key={index}
+                  style={{
+                    height: `${8 + inputLevel * (10 + (index % 4) * 5)}px`,
+                  }}
+                />
               ))}
             </span>
           </div>
         ) : null}
         {interimTranscript ? (
-          <div className="composer__voice-preview" role="status" aria-live="polite">
+          <div
+            className="composer__voice-preview"
+            role="status"
+            aria-live="polite"
+          >
             <span className="presence-pulse" aria-hidden="true" />
             {interimTranscript}
           </div>
@@ -92,14 +128,14 @@ export function ChatComposer({
           ref={composerRef}
           id="message-input"
           value={draft}
-          onChange={(event) => {
+          onChange={event => {
             const value = event.target.value;
             if (value.length <= APP_CONFIG.maxMessageCharacters) {
               onDraftChange(value);
               resizeComposer(event.target);
             }
           }}
-          onKeyDown={(event) => {
+          onKeyDown={event => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               if (draft.trim() && !isStreaming) {
@@ -112,14 +148,22 @@ export function ChatComposer({
           aria-describedby={voiceInputError ? "voice-input-error" : undefined}
         />
         {voiceInputError ? (
-          <div id="voice-input-error" className="composer__voice-error" role="alert">
+          <div
+            id="voice-input-error"
+            className="composer__voice-error"
+            role="alert"
+          >
             <span>{voiceInputError}</span>
             <details className="composer__voice-debug">
               <summary>Voice diagnostics</summary>
               <div className="composer__voice-debug-actions">
                 <button
                   type="button"
-                  onClick={() => void navigator.clipboard?.writeText(JSON.stringify(debugEvents, null, 2))}
+                  onClick={() =>
+                    void navigator.clipboard?.writeText(
+                      JSON.stringify(debugEvents, null, 2)
+                    )
+                  }
                 >
                   Copy debug log
                 </button>
@@ -142,11 +186,15 @@ export function ChatComposer({
             className={`composer__mic ${isListening ? "composer__mic--active" : ""}`}
             type="button"
             onClick={() => (isListening ? stopListening() : startListening())}
-            disabled={isStreaming || isLoading}
+            disabled={isStreaming || isLoading || isTranscribing}
             aria-label={isListening ? "Stop voice input" : "Start voice input"}
             title={isListening ? "Stop voice input" : "Talk to your companion"}
           >
-            {isListening ? <MicOff aria-hidden="true" size={16} /> : <Mic aria-hidden="true" size={16} />}
+            {isListening ? (
+              <MicOff aria-hidden="true" size={16} />
+            ) : (
+              <Mic aria-hidden="true" size={16} />
+            )}
           </button>
         ) : null}
       </div>

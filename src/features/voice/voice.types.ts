@@ -12,3 +12,14 @@ export interface VoiceSynthesisResult {
   cacheHit: boolean;
   mimeType: "audio/mpeg";
 }
+
+export interface VoiceTranscriptionInput {
+  accessToken: string;
+  sessionId: string;
+  companionId: CompanionId;
+  audio: File;
+}
+
+export interface VoiceTranscriptionResult {
+  transcript: string;
+}
