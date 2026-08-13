@@ -99,7 +99,7 @@ async function persistConversation(
   companionId: CompanionId,
   dependencies: ChatServiceDependencies,
 ) {
-  await dependencies.saveConversations(userId, companionId, userText, assistantText);
+  await dependencies.saveConversations(userId, sessionId, companionId, userText, assistantText);
 
   try {
     const existingMemoryContents = profile.memories.map((m) => m.content);
@@ -170,7 +170,11 @@ export async function createCompanionChatStream(
 
   const [profile, history, audienceVote, emotion] = await Promise.all([
     loadProfile(user.id, session.id, dependencies),
-    dependencies.findConversationHistory(user.id, session.companionId, APP_CONFIG.conversationHistoryLimit),
+    dependencies.findConversationHistory(
+      session.id,
+      session.companionId,
+      APP_CONFIG.conversationHistoryLimit,
+    ),
     dependencies.getLastVoteCache(session.id),
     classifyEmotion(userText),
   ]);
@@ -180,7 +184,10 @@ export async function createCompanionChatStream(
   await dependencies.setProfileCache(user.id, profile);
 
   const geminiStream = await streamRinaResponse({
-    systemInstruction: buildCompanionSystemPrompt(profile, session.companionId, audienceVote),
+    systemInstruction: buildCompanionSystemPrompt(profile, session.companionId, audienceVote, {
+      language: session.language,
+      personalityId: session.personalityId,
+    }),
     history,
     userText,
   });

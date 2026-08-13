@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       accessToken: formData.get("accessToken"),
       sessionId: formData.get("sessionId"),
       companionId: formData.get("companionId"),
+      language: formData.get("language"),
     });
     const { audio } = voiceAudioSchema.parse({ audio: formData.get("audio") });
     const authUser = await getSupabaseAuthUser(metadata.accessToken);
@@ -27,12 +28,13 @@ export async function POST(request: Request) {
 
     if (
       user.supabaseAuthId !== authUser.id ||
-      session.companionId !== metadata.companionId
+      session.companionId !== metadata.companionId ||
+      session.language !== metadata.language
     ) {
       throw new NotFoundError("Voice session");
     }
 
-    return createSuccessResponse(await transcribeVoiceAudio({ audio }));
+    return createSuccessResponse(await transcribeVoiceAudio({ audio, language: metadata.language }));
   } catch (error) {
     return createErrorResponse(error);
   }

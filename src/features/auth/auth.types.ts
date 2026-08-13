@@ -1,4 +1,9 @@
-import type { CompanionId, PersonaMood } from "@/features/persona/persona.types";
+import type {
+  CompanionId,
+  ConversationLanguage,
+  PersonaMood,
+  PersonalityId,
+} from "@/features/persona/persona.types";
 import type * as authRepository from "./auth.repository";
 import type { PersonaMemory } from "@/features/persona";
 
@@ -7,9 +12,9 @@ export type AuthServiceDependencies = {
   createUser: typeof authRepository.createUser;
   findLatestSessionByUserId: typeof authRepository.findLatestSessionByUserId;
   createSession: typeof authRepository.createSession;
-  updateSessionCompanion: typeof authRepository.updateSessionCompanion;
+  updateSessionConfiguration: typeof authRepository.updateSessionConfiguration;
   findSessionWithUserById: typeof authRepository.findSessionWithUserById;
-  findConversationsByUserIdAndCompanionId: typeof authRepository.findConversationsByUserIdAndCompanionId;
+  findConversationsByUserIdAndSessionId: typeof authRepository.findConversationsByUserIdAndSessionId;
   findMemoriesByUserId: typeof authRepository.findMemoriesByUserId;
 };
 
@@ -24,6 +29,8 @@ export interface PersonaSession {
   userId: string;
   audienceEnabled: boolean;
   companionId: CompanionId;
+  language: ConversationLanguage;
+  personalityId: PersonalityId;
   createdAt: string;
 }
 

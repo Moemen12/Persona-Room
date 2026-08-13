@@ -1,12 +1,19 @@
-"use client";
+import { LockKeyhole, Sparkles, Users, Volume2, VolumeX } from "lucide-react";
 
-import { Sparkles, Users, Volume2, VolumeX } from "lucide-react";
-
-import { COMPANIONS, type CompanionId } from "@/features/persona";
+import {
+  COMPANIONS,
+  LANGUAGES,
+  PERSONALITIES,
+  type CompanionId,
+  type ConversationLanguage,
+  type PersonalityId,
+} from "@/features/persona";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 
 interface AudienceHeaderProps {
   companionId: CompanionId;
+  language: ConversationLanguage;
+  personalityId: PersonalityId;
   viewerCount: number;
 }
 
@@ -14,15 +21,20 @@ function audienceLabel(viewerCount: number) {
   return viewerCount === 1 ? "1 person is here" : `${viewerCount} people are here`;
 }
 
-export function AudienceHeader({ companionId, viewerCount }: AudienceHeaderProps) {
+export function AudienceHeader({ companionId, language, personalityId, viewerCount }: AudienceHeaderProps) {
   const companion = COMPANIONS[companionId];
+  const roomLanguage = LANGUAGES[language];
+  const personality = PERSONALITIES[personalityId];
   const { play, setSoundEnabled, soundEnabled } = useInterfaceSound();
 
   return (
     <header className="audience-header">
       <div>
-        <span className="eyebrow"><Sparkles aria-hidden="true" size={13} /> {companion.name.toUpperCase()}’S STAGE</span>
-        <h1>Live Audience</h1>
+        <span className="eyebrow"><Sparkles aria-hidden="true" size={13} /> {companion.name.toUpperCase()}’S ROOM</span>
+        <h1>Shape the next moment together.</h1>
+        <span className="audience-header__identity">
+          <LockKeyhole aria-hidden="true" size={12} /> {roomLanguage.nativeLabel} · {personality.name} personality
+        </span>
       </div>
       <div className="audience-header__actions">
         <div className="audience-viewers" role="status">

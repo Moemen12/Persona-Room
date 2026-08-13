@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { CompanionId } from "@/features/persona";
+import type { CompanionId, ConversationLanguage } from "@/features/persona";
 import { appRoutes } from "@/infrastructure/config/routes";
 
 interface UseCompanionVoiceOptions {
   companionId: CompanionId;
+  language: ConversationLanguage;
   sessionId?: string;
   accessToken?: string;
 }
@@ -71,6 +72,7 @@ function isAbortError(error: unknown) {
 
 export function useCompanionVoice({
   companionId,
+  language,
   sessionId,
   accessToken,
 }: UseCompanionVoiceOptions) {
@@ -136,7 +138,7 @@ export function useCompanionVoice({
           resolve();
         };
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "en-US";
+        utterance.lang = language === "ko" ? "ko-KR" : language === "ar" ? "ar-SA" : "en-US";
         utterance.rate = companionId === "rina" ? 1.02 : 0.96;
         utterance.pitch = companionId === "rina" ? 1.08 : 0.88;
         utterance.onend = finish;
@@ -146,7 +148,7 @@ export function useCompanionVoice({
         callbacks.onPlaybackStarted?.();
       });
     },
-    [companionId, hasBrowserFallback],
+    [companionId, hasBrowserFallback, language],
   );
 
   const playAudioBuffer = useCallback(
@@ -201,7 +203,7 @@ export function useCompanionVoice({
         method: "POST",
         headers: { "content-type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ accessToken, sessionId, companionId, text: text.trim() }),
+        body: JSON.stringify({ accessToken, sessionId, companionId, language, text: text.trim() }),
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -213,7 +215,7 @@ export function useCompanionVoice({
         mimeType: payload.data.mimeType,
       };
     },
-    [accessToken, companionId, sessionId],
+    [accessToken, companionId, language, sessionId],
   );
 
   const playProgressiveResponse = useCallback(
@@ -345,6 +347,7 @@ export function useCompanionVoice({
               accessToken,
               sessionId,
               companionId,
+              language,
               text: item.text.trim(),
             }),
             signal: controller.signal,
@@ -377,6 +380,7 @@ export function useCompanionVoice({
       accessToken,
       companionId,
       fallbackSpeak,
+      language,
       playAudioBuffer,
       playProgressiveResponse,
       prepareAudio,

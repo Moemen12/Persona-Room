@@ -57,11 +57,11 @@ export function PersonaSidebar({
         <div
           className={cn("persona-profile__mood", mood !== "neutral" && "persona-profile__mood--active")}
           role="status"
-          aria-label={`Current mood: ${mood}`}
+          aria-label={`${companion.name} is feeling ${mood}`}
           key={mood}
         >
           <Heart aria-hidden="true" size={13} />
-          <span>Feeling <strong>{mood}</strong></span>
+          <span>{companion.name} feels <strong>{mood}</strong></span>
         </div>
         <div className="persona-profile__status" role="status" aria-label={`Room status: ${roomStatus}`}>
           <span className={cn("connection-dot", isLive && "connection-dot--live")} aria-hidden="true" />

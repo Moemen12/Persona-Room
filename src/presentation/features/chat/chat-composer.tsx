@@ -1,13 +1,14 @@
 import { Mic, MicOff, Send, Square } from "lucide-react";
 import { type FormEvent, useCallback, useRef } from "react";
 
-import { COMPANIONS, type CompanionId } from "@/features/persona";
+import { COMPANIONS, type CompanionId, type ConversationLanguage } from "@/features/persona";
 import { APP_CONFIG } from "@/lib/config/app";
 import { useVoiceInput } from "@/presentation/hooks/use-voice-input";
 
 interface ChatComposerProps {
   accessToken?: string;
   companionId: CompanionId;
+  language: ConversationLanguage;
   draft: string;
   isStreaming: boolean;
   isLoading: boolean;
@@ -22,6 +23,7 @@ const COMPOSER_MAX_HEIGHT = 142;
 export function ChatComposer({
   accessToken,
   companionId,
+  language,
   draft,
   isStreaming,
   isLoading,
@@ -54,6 +56,7 @@ export function ChatComposer({
   } = useVoiceInput({
     accessToken,
     companionId,
+    language,
     onFinalTranscript: handleFinalTranscript,
     sessionId,
   });

@@ -6,7 +6,6 @@ import { submitVoteAction } from "@/actions/audience.actions";
 import type { VoteTally } from "@/features/audience";
 import { COMPANIONS, type CompanionId } from "@/features/persona";
 import { VOTE_OPTIONS, type VoteOption } from "@/lib/config/app";
-
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 
 interface VotePanelProps {
@@ -32,12 +31,12 @@ export function VotePanel({ roomId, companionId, initialTally }: VotePanelProps)
     (currentTally, votedOption: VoteOption) => ({
       ...currentTally,
       [votedOption]: (currentTally[votedOption] ?? 0) + 1,
-    })
+    }),
   );
 
   const highestVote = Math.max(1, ...Object.values(optimisticTally).map(Number));
 
-  const handleVote = (option: VoteOption) => {
+  const handleCue = (option: VoteOption) => {
     play("vote");
     setErrorMessage(undefined);
 
@@ -46,11 +45,9 @@ export function VotePanel({ roomId, companionId, initialTally }: VotePanelProps)
 
       try {
         const result = await submitVoteAction(roomId, option, voterToken);
-        if (!result.success) {
-          setErrorMessage(result.error);
-        }
+        if (!result.success) setErrorMessage(result.error);
       } catch {
-        setErrorMessage("That vote did not land. Try again.");
+        setErrorMessage("That room cue did not land. Try again.");
       }
     });
   };
@@ -59,20 +56,20 @@ export function VotePanel({ roomId, companionId, initialTally }: VotePanelProps)
     <section className="vote-panel" aria-labelledby="vote-title">
       <div className="vote-panel__header">
         <div>
-          <span className="eyebrow">AUDIENCE VOTE</span>
-          <h2 id="vote-title">Direct {companion.name}</h2>
+          <span className="eyebrow">SHAPE THE MOMENT</span>
+          <h2 id="vote-title">Give {companion.name} a cue</h2>
         </div>
-        <span>Live poll</span>
+        <span>Room prompt</span>
       </div>
       <p className="vote-panel__description">
-        Cast your vote to shape {companion.name}&apos;s next response in the conversation.
+        You are not just watching. Send one direction and {companion.name} will fold the room&apos;s choice into the next live moment.
       </p>
 
-      {errorMessage && (
+      {errorMessage ? (
         <div className="error-message" role="alert">
           <p>{errorMessage}</p>
         </div>
-      )}
+      ) : null}
 
       <div className="vote-options">
         {VOTE_OPTIONS.map((candidate) => {
@@ -83,10 +80,15 @@ export function VotePanel({ roomId, companionId, initialTally }: VotePanelProps)
               key={candidate.value}
               className="vote-option"
               type="button"
-              onClick={() => handleVote(candidate.value)}
+              onClick={() => handleCue(candidate.value)}
+              aria-label={`Send cue: ${candidate.label}`}
             >
               <span className="vote-option__main">
                 <span className="vote-option__emoji" aria-hidden="true">{candidate.emoji}</span>
+                <span>
+                  <strong>{candidate.shortLabel}</strong>
+                  <small>{candidate.label}</small>
+                </span>
               </span>
               <span className="vote-option__count">{count}</span>
               <span className="vote-option__track" aria-hidden="true">
@@ -99,7 +101,7 @@ export function VotePanel({ roomId, companionId, initialTally }: VotePanelProps)
 
       <footer className="vote-panel__foot">
         <span className="presence-pulse" aria-hidden="true" />
-        <span>Votes sync instantly via Supabase & Upstash</span>
+        <span>Each cue becomes part of the shared room story.</span>
       </footer>
     </section>
   );

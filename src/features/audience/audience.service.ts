@@ -64,13 +64,12 @@ export async function getRoomSnapshot(
   sessionId: string,
   dependencies: AudienceServiceDependencies = defaultDependencies,
 ): Promise<RoomSnapshot> {
-  const { session, user } = await getInternalUserForSession(sessionId);
+  const { session } = await getInternalUserForSession(sessionId);
   if (!session.audienceEnabled) throw new NotFoundError("Room");
 
   const messages = sortRoomMessages(
     await dependencies.findRoomMessages(
-      user.id,
-      session.companionId,
+      session.id,
       APP_CONFIG.publicTranscriptLimit,
     ),
   );
@@ -79,6 +78,8 @@ export async function getRoomSnapshot(
     id: session.id,
     audienceEnabled: session.audienceEnabled,
     companionId: session.companionId,
+    language: session.language,
+    personalityId: session.personalityId,
     messages,
     tally: await getVoteTally(sessionId, dependencies),
   };
@@ -156,6 +157,7 @@ export async function submitVote(
 
   const reactionContent = voteReaction(option, session.companionId);
   const message = await dependencies.insertAssistantReaction(
+    session.id,
     user.id,
     session.companionId,
     reactionContent,

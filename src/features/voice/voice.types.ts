@@ -1,7 +1,8 @@
-import type { CompanionId } from "@/features/persona";
+import type { CompanionId, ConversationLanguage } from "@/features/persona";
 
 export interface VoiceSynthesisInput {
   companionId: CompanionId;
+  language: ConversationLanguage;
   text: string;
 }
 
@@ -17,6 +18,7 @@ export interface VoiceTranscriptionInput {
   accessToken: string;
   sessionId: string;
   companionId: CompanionId;
+  language: ConversationLanguage;
   audio: File;
 }
 

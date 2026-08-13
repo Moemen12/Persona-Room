@@ -1,11 +1,23 @@
-import { type CompanionId } from "@/features/persona/persona.types";
+import {
+  type CompanionId,
+  type ConversationLanguage,
+  type PersonalityId,
+} from "@/features/persona/persona.types";
 import { getSupabaseAdminClient } from "@/infrastructure/supabase/server";
 import { NotFoundError } from "@/lib/errors";
-
 import type { PersonaSession, PersonaUser } from "./auth.types";
 
 function toCompanionId(value: unknown): CompanionId {
   return value === "joon" ? "joon" : "rina";
+}
+
+function toConversationLanguage(value: unknown): ConversationLanguage {
+  return value === "ko" || value === "ar" ? value : "en";
+}
+
+function toPersonalityId(value: unknown): PersonalityId {
+  const supported = ["playful", "melancholic", "magnetic", "mischievous", "roaster", "dramatic"] as const;
+  return supported.includes(value as PersonalityId) ? (value as PersonalityId) : "playful";
 }
 
 function toPersonaUser(row: Record<string, unknown>): PersonaUser {
@@ -22,9 +34,13 @@ function toPersonaSession(row: Record<string, unknown>): PersonaSession {
     userId: String(row.user_id),
     audienceEnabled: Boolean(row.audience_enabled),
     companionId: toCompanionId(row.companion_id),
+    language: toConversationLanguage(row.language),
+    personalityId: toPersonalityId(row.personality_id),
     createdAt: String(row.created_at),
   };
 }
+
+const sessionColumns = "id, user_id, audience_enabled, companion_id, language, personality_id, created_at";
 
 export async function findUserBySupabaseId(supabaseAuthId: string): Promise<PersonaUser | null> {
   const client = getSupabaseAdminClient();
@@ -52,7 +68,7 @@ export async function findLatestSessionByUserId(userId: string): Promise<Persona
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("sessions")
-    .select("id, user_id, audience_enabled, companion_id, created_at")
+    .select(sessionColumns)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -61,27 +77,46 @@ export async function findLatestSessionByUserId(userId: string): Promise<Persona
   return data ? toPersonaSession(data as Record<string, unknown>) : null;
 }
 
-export async function createSession(userId: string, companionId: CompanionId): Promise<PersonaSession> {
+export async function createSession(
+  userId: string,
+  companionId: CompanionId,
+  language: ConversationLanguage = "en",
+  personalityId: PersonalityId = "playful",
+): Promise<PersonaSession> {
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("sessions")
-    .insert({ user_id: userId, audience_enabled: true, companion_id: companionId })
-    .select("id, user_id, audience_enabled, companion_id, created_at")
+    .insert({
+      user_id: userId,
+      audience_enabled: true,
+      companion_id: companionId,
+      language,
+      personality_id: personalityId,
+    })
+    .select(sessionColumns)
     .single();
   if (error || !data) throw error ?? new NotFoundError("Session");
   return toPersonaSession(data as Record<string, unknown>);
 }
 
-export async function updateSessionCompanion(
+export async function updateSessionConfiguration(
   sessionId: string,
-  companionId: CompanionId,
+  configuration: {
+    companionId: CompanionId;
+    language: ConversationLanguage;
+    personalityId: PersonalityId;
+  },
 ): Promise<PersonaSession> {
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("sessions")
-    .update({ companion_id: companionId })
+    .update({
+      companion_id: configuration.companionId,
+      language: configuration.language,
+      personality_id: configuration.personalityId,
+    })
     .eq("id", sessionId)
-    .select("id, user_id, audience_enabled, companion_id, created_at")
+    .select(sessionColumns)
     .single();
   if (error || !data) throw error ?? new NotFoundError("Room");
   return toPersonaSession(data as Record<string, unknown>);
@@ -91,7 +126,7 @@ export async function findSessionWithUserById(sessionId: string) {
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("sessions")
-    .select("id, user_id, audience_enabled, companion_id, created_at, users!inner(id, supabase_auth_id, display_name)")
+    .select(`${sessionColumns}, users!inner(id, supabase_auth_id, display_name)`)
     .eq("id", sessionId)
     .single();
 
@@ -119,8 +154,9 @@ export async function findMemoriesByUserId(userId: string) {
   }));
 }
 
-export async function findConversationsByUserIdAndCompanionId(
+export async function findConversationsByUserIdAndSessionId(
   userId: string,
+  sessionId: string,
   companionId: CompanionId,
   limit: number,
 ) {
@@ -129,12 +165,14 @@ export async function findConversationsByUserIdAndCompanionId(
     .from("conversations")
     .select("id, role, content, created_at")
     .eq("user_id", userId)
+    .eq("session_id", sessionId)
     .eq("companion_id", companionId)
     .order("created_at", { ascending: true })
-    .order("id", { ascending: true });
+    .order("id", { ascending: true })
+    .limit(limit);
 
   if (error) throw error;
-  return (data ?? []).slice(-limit).map((row) => ({
+  return (data ?? []).map((row) => ({
     id: String(row.id),
     role: row.role as "user" | "assistant",
     content: String(row.content),

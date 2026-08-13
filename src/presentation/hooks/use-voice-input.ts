@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { transcribeAction, type TranscriptionState } from "@/actions/voice.actions";
+import type { ConversationLanguage } from "@/features/persona";
 
 export interface VoiceDebugEvent {
   at: string;
@@ -22,6 +23,7 @@ export interface VoiceDebugEvent {
 interface UseVoiceInputOptions {
   accessToken?: string;
   companionId: string;
+  language: ConversationLanguage;
   onFinalTranscript: (transcript: string) => void;
   sessionId?: string;
 }
@@ -151,6 +153,7 @@ const initialTranscriptionState: TranscriptionState = { status: "idle" };
 export function useVoiceInput({
   accessToken,
   companionId,
+  language,
   onFinalTranscript,
   sessionId,
 }: UseVoiceInputOptions) {
@@ -262,6 +265,7 @@ export function useVoiceInput({
       formData.append("accessToken", accessToken);
       formData.append("sessionId", sessionId);
       formData.append("companionId", companionId);
+      formData.append("language", language);
       startTransition(() => {
         runTranscription(formData);
       });
@@ -271,7 +275,7 @@ export function useVoiceInput({
     setActiveStream(stream);
     dispatch({ type: "START_RECORDING" });
     recorder.start();
-  }, [accessToken, companionId, debug, runTranscription, sessionId, voiceState.status]);
+  }, [accessToken, companionId, debug, language, runTranscription, sessionId, voiceState.status]);
 
   const stopListening = useCallback(() => {
     const recorder = recorderRef.current;

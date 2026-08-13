@@ -1,17 +1,19 @@
 import { z } from "zod";
 
 import { broadcastRoomEvent } from "@/features/audience/audience.service";
-import { getSessionBootstrap, updateSessionCompanion } from "@/features/auth/auth.service";
-import { COMPANION_IDS } from "@/features/persona/persona.types";
+import { getSessionBootstrap, updateSessionConfiguration } from "@/features/auth/auth.service";
+import { COMPANION_IDS, CONVERSATION_LANGUAGES, PERSONALITY_IDS } from "@/features/persona";
 import { getSupabaseAuthUser } from "@/infrastructure/supabase/server";
 import { AuthenticationError, MethodNotAllowedError } from "@/lib/errors";
 import { createErrorResponse, createSuccessResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
-const companionUpdateSchema = z.object({
+const sessionConfigurationSchema = z.object({
   sessionId: z.uuid(),
   companionId: z.enum(COMPANION_IDS),
+  language: z.enum(CONVERSATION_LANGUAGES),
+  personalityId: z.enum(PERSONALITY_IDS),
 });
 
 function getAccessToken(request: Request) {
@@ -34,10 +36,19 @@ export async function PUT(request: Request) {
   try {
     const accessToken = getAccessToken(request);
     if (!accessToken) return createErrorResponse(new AuthenticationError());
-    const input = companionUpdateSchema.parse(await request.json());
+    const input = sessionConfigurationSchema.parse(await request.json());
     const authUser = await getSupabaseAuthUser(accessToken);
-    const session = await updateSessionCompanion(input.sessionId, authUser.id, input.companionId);
-    await broadcastRoomEvent(session.id, { type: "companion-changed", companionId: session.companionId });
+    const session = await updateSessionConfiguration(input.sessionId, authUser.id, {
+      companionId: input.companionId,
+      language: input.language,
+      personalityId: input.personalityId,
+    });
+    await broadcastRoomEvent(session.id, {
+      type: "companion-changed",
+      companionId: session.companionId,
+      language: session.language,
+      personalityId: session.personalityId,
+    });
     return createSuccessResponse({ session });
   } catch (error) {
     return createErrorResponse(error);

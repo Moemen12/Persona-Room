@@ -1,11 +1,12 @@
 import { z } from "zod";
 
-import { COMPANION_IDS } from "@/features/persona";
+import { COMPANION_IDS, CONVERSATION_LANGUAGES } from "@/features/persona";
 
 export const voiceRequestSchema = z.object({
   accessToken: z.string().min(1),
   sessionId: z.uuid(),
   companionId: z.enum(COMPANION_IDS),
+  language: z.enum(CONVERSATION_LANGUAGES),
   text: z.string().trim().min(1).max(500),
 });
 
@@ -15,6 +16,7 @@ export const voiceTranscriptionMetadataSchema = z.object({
   accessToken: z.string().min(1),
   sessionId: z.uuid(),
   companionId: z.enum(COMPANION_IDS),
+  language: z.enum(CONVERSATION_LANGUAGES),
 });
 
 export const voiceAudioSchema = z.object({

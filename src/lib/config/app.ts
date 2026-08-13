@@ -14,10 +14,34 @@ export const APP_CONFIG = {
 } as const;
 
 export const VOTE_OPTIONS = [
-  { value: "sing", label: "Sing a song", emoji: "🎤" },
-  { value: "joke", label: "Tell a joke", emoji: "😂" },
-  { value: "art", label: "Show your art", emoji: "🎨" },
-  { value: "surprise", label: "Surprise us", emoji: "✨" },
+  {
+    value: "sing",
+    label: "Give us a tiny performance",
+    shortLabel: "Perform something",
+    emoji: "🎤",
+    cue: "give the room a tiny performance or playful demonstration",
+  },
+  {
+    value: "joke",
+    label: "Make the room laugh",
+    shortLabel: "Make us laugh",
+    emoji: "😂",
+    cue: "make the room laugh with a short, in-character moment",
+  },
+  {
+    value: "art",
+    label: "Open a personal thought",
+    shortLabel: "Open up",
+    emoji: "🎨",
+    cue: "share one personal, harmless thought that helps the room feel closer",
+  },
+  {
+    value: "surprise",
+    label: "Take the conversation somewhere",
+    shortLabel: "Surprise us",
+    emoji: "✨",
+    cue: "surprise the room with a safe, playful turn in the conversation",
+  },
 ] as const;
 
 export type VoteOption = (typeof VOTE_OPTIONS)[number]["value"];

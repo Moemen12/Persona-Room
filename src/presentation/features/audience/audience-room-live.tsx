@@ -46,9 +46,16 @@ export function AudienceRoomLive({ roomId, initialSnapshot }: AudienceRoomLivePr
       <div className="stage-sparkle stage-sparkle--two" aria-hidden="true" />
 
       <div className="audience-room audience-room--entrance">
-        <AudienceHeader companionId={initialSnapshot.companionId} viewerCount={viewerCount} />
+        <AudienceHeader
+          companionId={initialSnapshot.companionId}
+          language={initialSnapshot.language}
+          personalityId={initialSnapshot.personalityId}
+          viewerCount={viewerCount}
+        />
         <AudienceSpotlight
           companionId={initialSnapshot.companionId}
+          language={initialSnapshot.language}
+          personalityId={initialSnapshot.personalityId}
           mood={mood}
           isPerforming={isPerforming}
           isListening={isListening}

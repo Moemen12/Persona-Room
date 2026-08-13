@@ -1,7 +1,7 @@
-import { getRedisClient } from "@/infrastructure/redis/client";
 import { getSupabaseAdminClient } from "@/infrastructure/supabase/server";
+import { getRedisClient } from "@/infrastructure/redis/client";
 import { APP_CONFIG, type VoteOption } from "@/lib/config/app";
-import { type CompanionId, type PersonaMemory, type PersonaProfile } from "@/features/persona/persona.types";
+import { type PersonaMemory, type PersonaProfile } from "@/features/persona/persona.types";
 import { type StoredConversation } from "./chat.types";
 
 export async function findMemoriesByUserId(userId: string): Promise<PersonaMemory[]> {
@@ -56,34 +56,36 @@ export async function findOldMemoriesForCleanup(userId: string, limit: number) {
 
 export async function saveConversations(
   userId: string,
-  companionId: CompanionId,
+  sessionId: string,
+  companionId: string,
   userText: string,
   assistantText: string,
 ): Promise<void> {
   const client = getSupabaseAdminClient();
   const { error } = await client.from("conversations").insert([
-    { user_id: userId, companion_id: companionId, role: "user", content: userText },
-    { user_id: userId, companion_id: companionId, role: "assistant", content: assistantText },
+    { user_id: userId, session_id: sessionId, companion_id: companionId, role: "user", content: userText },
+    { user_id: userId, session_id: sessionId, companion_id: companionId, role: "assistant", content: assistantText },
   ]);
   if (error) throw error;
 }
 
 export async function findConversationHistory(
-  userId: string,
-  companionId: CompanionId,
+  sessionId: string,
+  companionId: string,
   limit: number,
 ): Promise<StoredConversation[]> {
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("conversations")
-    .select("role, content, created_at")
-    .eq("user_id", userId)
+    .select("role, content, created_at, id")
+    .eq("session_id", sessionId)
     .eq("companion_id", companionId)
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
   if (error) throw error;
   return (data ?? [])
-    .slice(-limit)
+    .reverse()
     .map((row) => ({
       role: row.role as "user" | "assistant",
       content: String(row.content),

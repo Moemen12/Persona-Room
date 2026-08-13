@@ -13,13 +13,18 @@ export async function POST(request: Request) {
     const authUser = await getSupabaseAuthUser(input.accessToken);
     const { session, user } = await getInternalUserForSession(input.sessionId);
 
-    if (user.supabaseAuthId !== authUser.id || session.companionId !== input.companionId) {
+    if (
+      user.supabaseAuthId !== authUser.id ||
+      session.companionId !== input.companionId ||
+      session.language !== input.language
+    ) {
       throw new NotFoundError("Room");
     }
 
     return createSuccessResponse(
       await synthesizeCompanionVoice({
         companionId: input.companionId,
+        language: input.language,
         text: input.text,
       }),
     );

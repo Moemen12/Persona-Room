@@ -6,7 +6,11 @@ import { type FormEvent, useCallback, useReducer, useState, useActionState, useE
 
 import type { RoomBroadcast } from "@/features/audience";
 import type { SessionBootstrap } from "@/features/auth";
-import { type CompanionId, type PersonaMood } from "@/features/persona";
+import {
+  type CompanionId,
+  type PersonaMood,
+  type SessionPersonaConfig,
+} from "@/features/persona";
 import { appRoutes } from "@/infrastructure/config/routes";
 import { getSupabaseBrowserClient } from "@/infrastructure/supabase/browser";
 import {
@@ -243,6 +247,11 @@ export function ChatExperience() {
     state.identity?.bootstrap.session.companionId ??
     state.hintedCompanionId ??
     "rina";
+  const currentSelection: SessionPersonaConfig = {
+    companionId,
+    language: state.identity?.bootstrap.session.language ?? "en",
+    personalityId: state.identity?.bootstrap.session.personalityId ?? "playful",
+  };
   const {
     isSupported: isVoiceSupported,
     voiceEnabled,
@@ -253,6 +262,7 @@ export function ChatExperience() {
     stopSpeaking,
   } = useCompanionVoice({
     companionId,
+    language: currentSelection.language,
     sessionId: state.identity?.bootstrap.session.id,
     accessToken: state.identity?.accessToken,
   });
@@ -435,12 +445,17 @@ export function ChatExperience() {
     }
   }, [sessionState, play, setMessages]);
 
-  const chooseCompanion = async (companionId: CompanionId) => {
+  const chooseCompanion = async (selection: SessionPersonaConfig) => {
     if (!state.identity) return;
-    const currentCompanionId = state.identity.bootstrap.session.companionId;
-    if (companionId === currentCompanionId) {
+    const currentSession = state.identity.bootstrap.session;
+    const isSameSelection =
+      selection.companionId === currentSession.companionId &&
+      selection.language === currentSession.language &&
+      selection.personalityId === currentSession.personalityId;
+
+    if (isSameSelection) {
       window.localStorage.setItem(
-        `${COMPANION_SELECTION_KEY}:${state.identity.bootstrap.session.id}`,
+        `${COMPANION_SELECTION_KEY}:${currentSession.id}`,
         "confirmed"
       );
       dispatch({ type: "set-selector-open", open: false });
@@ -453,8 +468,10 @@ export function ChatExperience() {
 
     const formData = new FormData();
     formData.append("accessToken", state.identity.accessToken);
-    formData.append("sessionId", state.identity.bootstrap.session.id);
-    formData.append("companionId", companionId);
+    formData.append("sessionId", currentSession.id);
+    formData.append("companionId", selection.companionId);
+    formData.append("language", selection.language);
+    formData.append("personalityId", selection.personalityId);
     startTransition(() => {
       runUpdateCompanion(formData);
     });
@@ -530,12 +547,12 @@ export function ChatExperience() {
       <div className="stage-sparkle stage-sparkle--two" aria-hidden="true" />
 
       {state.isSelectorOpen && state.identity ? (
-        <CompanionPicker
-          currentCompanionId={companionId}
-          isChanging={state.isChangingCompanion}
-          onSelect={id => void chooseCompanion(id)}
-          onClose={() => dispatch({ type: "set-selector-open", open: false })}
-        />
+          <CompanionPicker
+            currentSelection={currentSelection}
+            isChanging={state.isChangingCompanion}
+            onSelect={selection => void chooseCompanion(selection)}
+            onClose={() => dispatch({ type: "set-selector-open", open: false })}
+          />
       ) : null}
 
       <div className="chat-stage">
@@ -599,6 +616,7 @@ export function ChatExperience() {
             <ChatComposer
               accessToken={state.identity?.accessToken}
               companionId={companionId}
+              language={currentSelection.language}
               draft={state.draft}
               isStreaming={isStreaming}
               isLoading={isLoading}

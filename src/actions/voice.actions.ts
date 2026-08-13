@@ -1,6 +1,7 @@
 "use server";
 
 import { getInternalUserForSession } from "@/features/auth/auth.service";
+import { CONVERSATION_LANGUAGES, type ConversationLanguage } from "@/features/persona";
 import { transcribeVoiceAudio } from "@/features/voice";
 import { getSupabaseAuthUser } from "@/infrastructure/supabase/server";
 import { NotFoundError } from "@/lib/errors";
@@ -11,28 +12,44 @@ export interface TranscriptionState {
   status: "idle" | "pending" | "success" | "error";
 }
 
+function isConversationLanguage(value: string): value is ConversationLanguage {
+  return CONVERSATION_LANGUAGES.includes(value as ConversationLanguage);
+}
+
 export async function transcribeAction(
-  prevState: TranscriptionState,
+  _prevState: TranscriptionState,
   formData: FormData,
 ): Promise<TranscriptionState> {
   try {
-    const accessToken = formData.get("accessToken") as string;
-    const sessionId = formData.get("sessionId") as string;
-    const companionId = formData.get("companionId") as string;
-    const audio = formData.get("audio") as File;
+    const accessToken = formData.get("accessToken");
+    const sessionId = formData.get("sessionId");
+    const companionId = formData.get("companionId");
+    const language = formData.get("language");
+    const audio = formData.get("audio");
 
-    if (!accessToken || !sessionId || !companionId || !audio) {
-      return { status: "error", error: "Missing required transcription data." };
+    if (
+      typeof accessToken !== "string" ||
+      typeof sessionId !== "string" ||
+      typeof companionId !== "string" ||
+      typeof language !== "string" ||
+      !isConversationLanguage(language) ||
+      !(audio instanceof File)
+    ) {
+      return { status: "error", error: "Missing or invalid voice session data." };
     }
 
     const authUser = await getSupabaseAuthUser(accessToken);
     const { session, user } = await getInternalUserForSession(sessionId);
 
-    if (user.supabaseAuthId !== authUser.id || session.companionId !== companionId) {
+    if (
+      user.supabaseAuthId !== authUser.id ||
+      session.companionId !== companionId ||
+      session.language !== language
+    ) {
       throw new NotFoundError("Voice session");
     }
 
-    const { transcript } = await transcribeVoiceAudio({ audio });
+    const { transcript } = await transcribeVoiceAudio({ audio, language });
 
     if (!transcript) {
       return { status: "error", error: "I didn't catch that. Please try again." };

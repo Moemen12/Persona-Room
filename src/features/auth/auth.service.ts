@@ -1,9 +1,9 @@
-import { type CompanionId } from "@/features/persona/persona.types";
 import { APP_CONFIG } from "@/lib/config/app";
 import { NotFoundError } from "@/lib/errors";
 
 import * as authRepository from "./auth.repository";
 import type { PersonaSession, SessionBootstrap, AuthServiceDependencies } from "./auth.types";
+import type { CompanionId, ConversationLanguage, PersonalityId } from "@/features/persona";
 
 function guestName() {
   return `Guest-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -14,9 +14,9 @@ const defaultDependencies: AuthServiceDependencies = {
   createUser: authRepository.createUser,
   findLatestSessionByUserId: authRepository.findLatestSessionByUserId,
   createSession: authRepository.createSession,
-  updateSessionCompanion: authRepository.updateSessionCompanion,
+  updateSessionConfiguration: authRepository.updateSessionConfiguration,
   findSessionWithUserById: authRepository.findSessionWithUserById,
-  findConversationsByUserIdAndCompanionId: authRepository.findConversationsByUserIdAndCompanionId,
+  findConversationsByUserIdAndSessionId: authRepository.findConversationsByUserIdAndSessionId,
   findMemoriesByUserId: authRepository.findMemoriesByUserId,
 };
 
@@ -32,7 +32,7 @@ export async function ensurePersonaUserAndSession(
   const existingSession = await dependencies.findLatestSessionByUserId(user.id);
   if (existingSession) return { user, session: existingSession };
 
-  const session = await dependencies.createSession(user.id, "rina");
+  const session = await dependencies.createSession(user.id, "rina", "en", "playful");
   return { user, session };
 }
 
@@ -42,8 +42,9 @@ export async function getSessionBootstrap(
 ): Promise<SessionBootstrap> {
   const { user, session } = await ensurePersonaUserAndSession(supabaseAuthId, dependencies);
   const [messages, memories] = await Promise.all([
-    dependencies.findConversationsByUserIdAndCompanionId(
+    dependencies.findConversationsByUserIdAndSessionId(
       user.id,
+      session.id,
       session.companionId,
       APP_CONFIG.conversationHistoryLimit,
     ),
@@ -59,17 +60,28 @@ export async function getSessionBootstrap(
   };
 }
 
-export async function updateSessionCompanion(
+export async function updateSessionConfiguration(
   sessionId: string,
   supabaseAuthId: string,
-  companionId: CompanionId,
+  configuration: {
+    companionId: CompanionId;
+    language: ConversationLanguage;
+    personalityId: PersonalityId;
+  },
   dependencies: AuthServiceDependencies = defaultDependencies,
 ): Promise<PersonaSession> {
   const { session, user } = await dependencies.findSessionWithUserById(sessionId);
   if (user.supabaseAuthId !== supabaseAuthId) throw new NotFoundError("Room");
-  if (session.companionId === companionId) return session;
 
-  return dependencies.updateSessionCompanion(sessionId, companionId);
+  if (
+    session.companionId === configuration.companionId &&
+    session.language === configuration.language &&
+    session.personalityId === configuration.personalityId
+  ) {
+    return session;
+  }
+
+  return dependencies.updateSessionConfiguration(sessionId, configuration);
 }
 
 export async function getInternalUserForSession(

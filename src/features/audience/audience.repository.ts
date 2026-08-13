@@ -2,15 +2,13 @@ import { getSupabaseAdminClient } from "@/infrastructure/supabase/server";
 import { type VoteOption } from "@/lib/config/app";
 import { sortRoomMessages } from "@/lib/message-order";
 import { type RoomMessage } from "./audience.types";
-import { type CompanionId } from "@/features/persona/persona.types";
 
-export async function findRoomMessages(userId: string, companionId: CompanionId, limit: number): Promise<RoomMessage[]> {
+export async function findRoomMessages(sessionId: string, limit: number): Promise<RoomMessage[]> {
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("conversations")
     .select("id, role, content, created_at")
-    .eq("user_id", userId)
-    .eq("companion_id", companionId)
+    .eq("session_id", sessionId)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limit);
@@ -51,14 +49,16 @@ export async function insertVote(sessionId: string, option: VoteOption, voterTok
 }
 
 export async function insertAssistantReaction(
+  sessionId: string,
   userId: string,
-  companionId: CompanionId,
-  content: string
+  companionId: string,
+  content: string,
 ): Promise<RoomMessage> {
   const client = getSupabaseAdminClient();
   const { data, error } = await client
     .from("conversations")
     .insert({
+      session_id: sessionId,
       user_id: userId,
       companion_id: companionId,
       role: "assistant",
@@ -66,7 +66,7 @@ export async function insertAssistantReaction(
     })
     .select("id, role, content, created_at")
     .single();
-  if (error || !data) throw error ?? new Error("Reaction failed");
+  if (error || !data) throw error ?? new Error("Audience cue failed");
   return {
     id: String(data.id),
     role: data.role as "assistant",

@@ -89,11 +89,20 @@ export function ChatTranscript({
               !isStreaming && 
               narration.assistantId === message.id;
 
-            const isWaitingForVoice = 
-              voiceSyncEnabled && 
-              isFreshAssistantResponse && 
-              !narration.started && 
+            const isWaitingForVoice =
+              voiceSyncEnabled &&
+              isAssistant &&
+              isLatestMessage &&
+              narration.assistantId === message.id &&
+              narration.waiting &&
+              !narration.started &&
               !narration.completed;
+
+            // Never expose partial or complete assistant text while neural voice is preparing.
+            // The typing state below is the only visible feedback until playback starts.
+            if (isWaitingForVoice) {
+              return null;
+            }
 
             const shouldAnimateFreshReply = 
               isFreshAssistantResponse && 
@@ -108,11 +117,10 @@ export function ChatTranscript({
                 assistantName={companion.name}
                 animateText={shouldAnimateFreshReply}
                 isStreaming={isLatestMessage && isAssistant && isStreaming}
-                isPreparing={isWaitingForVoice}
               />
             );
           })}
-          {isStreaming && latestMessage?.role === "user" ? (
+          {isStreaming && (latestMessage?.role === "user" || voiceSyncEnabled) ? (
             <div className="assistant-typing" role="status" aria-live="polite">
               <span className="assistant-typing__spark" aria-hidden="true">
                 <Sparkles size={14} />

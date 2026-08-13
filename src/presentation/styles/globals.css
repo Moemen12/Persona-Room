@@ -534,8 +534,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 .audience-room--entrance .audience-spotlight { animation: audience-entrance 620ms 90ms cubic-bezier(.23, 1, .32, 1) both; }
 .audience-room--entrance .vote-panel { animation: audience-entrance 620ms 150ms cubic-bezier(.23, 1, .32, 1) both; }
 .audience-room--entrance .audience-transcript { animation: audience-entrance 620ms 210ms cubic-bezier(.23, 1, .32, 1) both; }
-.audience-header { grid-area: header; min-height: 72px; margin: 0; }
-.audience-header h1 { font-size: clamp(2.4rem, 5vw, 4.2rem); line-height: 0.95; }
+.audience-header { grid-area: header; min-height: 72px; margin: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.audience-header h1 { max-width: 650px; font-size: clamp(2.4rem, 5vw, 4.2rem); line-height: 0.95; }
+.audience-header__identity { @apply inline-flex items-center gap-1.5 mt-2 text-[0.68rem]; color: rgba(221, 214, 254, 0.52); }
+.audience-header__identity svg { color: var(--violet-bright); }
 .audience-viewers {
   @apply inline-flex items-center gap-[7px] min-h-[39px] rounded-[13px] px-3 text-[var(--lavender)] text-[0.72rem] font-[720] whitespace-nowrap;
   border: 1px solid var(--line);
@@ -553,7 +555,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   background: radial-gradient(circle, rgba(143, 91, 255, 0.25), transparent 70%);
   content: "";
 }
-.audience-spotlight__copy { @apply grid gap-[9px]; }
+.audience-spotlight__copy { @apply grid min-w-0 flex-1 gap-[9px]; }
 .live-chip { @apply w-fit px-[9px] py-1.5; }
 .audience-spotlight__copy p {
   @apply m-0 text-[var(--lavender)] font-[720] tracking-[-0.03em];
@@ -561,11 +563,14 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 }
 .audience-spotlight__copy > span:last-child { color: var(--muted); font-size: 0.8rem; }
 .audience-spotlight__mood {
-  @apply inline-flex items-center gap-1.5 ml-auto text-[0.75rem];
+  @apply inline-flex flex-col items-end gap-1.5 ml-auto text-[0.75rem] text-right;
   color: rgba(221, 214, 254, 0.68);
 }
 .audience-spotlight__mood svg { color: #d7baff; }
 .audience-spotlight__mood strong { color: var(--lavender); }
+.audience-spotlight__lock { @apply inline-flex items-center gap-1 text-[0.63rem] whitespace-nowrap; color: rgba(221, 214, 254, 0.48); }
+.audience-spotlight__lock svg { color: var(--violet-bright); }
+.audience-spotlight__spark { @apply pointer-events-none absolute top-4 right-5; color: rgba(215, 186, 255, 0.62); }
 .audience-layout { display: contents; }
 .audience-transcript { grid-area: transcript; overflow: hidden; border-radius: 27px; }
 .audience-transcript__header > span:first-child { @apply inline-flex items-center gap-[7px] text-[var(--lavender)]; }
@@ -679,7 +684,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   transform: translateX(3px);
 }
 .vote-option--selected { animation: vote-pop 360ms ease-out; }
-.vote-option__main { @apply inline-flex items-center gap-[9px] text-[0.84rem] font-[730]; }
+.vote-option__main { @apply inline-flex min-w-0 items-center gap-[9px] text-[0.84rem] font-[730]; }
+.vote-option__main > span:last-child { @apply grid min-w-0 gap-0.5; }
+.vote-option__main small { @apply block overflow-hidden text-ellipsis whitespace-nowrap text-[0.64rem] font-[500]; color: rgba(221, 214, 254, 0.48); }
 .vote-option__emoji {
   @apply grid w-[25px] h-[25px] place-items-center rounded-[8px] text-[0.94rem];
   background: rgba(219, 198, 255, 0.08);
@@ -724,6 +731,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   @apply max-w-[460px] text-[var(--muted)] text-[0.87rem] leading-[1.55];
   margin: 13px 0 24px;
 }
+.companion-picker__section { @apply grid gap-2.5 mt-5; }
+.companion-picker__section-heading { @apply flex flex-wrap items-center justify-between gap-2; color: rgba(221, 214, 254, 0.56); font-size: 0.68rem; }
+.companion-picker__section-heading .eyebrow { margin: 0; }
 .companion-picker__choices { @apply grid grid-cols-2 gap-[13px]; }
 .companion-choice {
   @apply flex min-w-0 items-center gap-3 rounded-[19px] p-[13px] text-[var(--lavender)] text-left transition-all duration-180;
@@ -740,6 +750,35 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 .companion-choice__copy strong { @apply text-white text-base; }
 .companion-choice__copy > span { @apply text-[var(--violet-bright)] text-[0.66rem] font-[770]; }
 .companion-choice__copy small { @apply text-[var(--muted)] text-[0.68rem] leading-[1.35]; }
+.companion-choice > svg { @apply ml-auto flex-none; color: var(--violet-bright); }
+.room-choice-grid { @apply grid gap-2; }
+.room-choice-grid--language { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.room-choice-grid--personality { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.room-choice {
+  @apply flex min-w-0 items-center gap-2 rounded-[15px] px-3 py-2.5 text-left transition-all duration-180;
+  border: 1px solid var(--line);
+  color: var(--lavender);
+  background: rgba(255, 255, 255, 0.035);
+}
+.room-choice:hover:not(:disabled), .room-choice--selected {
+  border-color: rgba(208, 183, 255, 0.62);
+  background: rgba(143, 91, 255, 0.2);
+  transform: translateY(-1px);
+}
+.room-choice strong { @apply block text-white text-[0.78rem]; }
+.room-choice > span:not(.room-choice__copy):not(.room-choice__emoji) { @apply block text-[0.64rem]; color: var(--muted); }
+.room-choice__emoji { @apply flex-none text-[1.15rem]; }
+.room-choice__copy { @apply grid min-w-0 gap-0.5; }
+.room-choice__copy > span { @apply text-[0.64rem] leading-[1.25]; color: var(--muted); }
+.room-choice__lock-note { @apply flex items-center gap-1.5 m-0 text-[0.68rem] leading-[1.35]; color: rgba(221, 214, 254, 0.58); }
+.companion-picker__confirm {
+  @apply mt-6 w-full rounded-[15px] px-4 py-3 text-[0.76rem] font-[820] tracking-[0.04em] uppercase transition-all duration-180;
+  color: #120b28;
+  background: linear-gradient(110deg, #d9c4ff, #9d75ff);
+  box-shadow: 0 12px 30px rgba(127, 81, 231, 0.26);
+}
+.companion-picker__confirm:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 16px 34px rgba(127, 81, 231, 0.38); }
+.companion-picker__confirm:disabled { cursor: wait; opacity: 0.58; }
 
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
 @keyframes speaking-bob { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-4px) scale(1.025); } }
@@ -770,6 +809,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 
 @media (max-width: 850px) {
   .chat-layout { grid-template-columns: 1fr; }
+  .room-choice-grid--personality { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .persona-profile { @apply grid [min-height:unset] grid-cols-[auto_1fr] items-center gap-x-[22px] gap-y-0 py-[23px] px-[25px] text-left; }
   .persona-profile__halo { top: 20px; left: 27px; width: 158px; height: 158px; }
   .persona-profile__live { top: 16px; right: 16px; left: auto; }
@@ -796,7 +836,15 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   .audience-transcript__body { height: min(57vh, 590px); }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 520px) {
+  .audience-header { align-items: flex-end; }
+  .audience-header h1 { font-size: clamp(2rem, 10vw, 2.8rem); }
+  .audience-header__identity { display: none; }
+  .audience-spotlight { align-items: flex-start; flex-wrap: wrap; gap: 14px; }
+  .audience-spotlight__mood { width: 100%; flex-direction: row; align-items: center; justify-content: space-between; text-align: left; margin-left: 0; }
+  .audience-spotlight__spark { display: none; }
+  .companion-picker__panel { max-height: calc(100dvh - 24px); overflow-y: auto; padding: 22px 18px; }
+  .companion-picker__choices, .room-choice-grid--language, .room-choice-grid--personality { grid-template-columns: 1fr; }
   .persona-shell, .audience-shell { padding: 14px 12px 28px; }
   .persona-header { min-height: 48px; margin-bottom: 14px; }
   .persona-header__channel, .share-button span, .persona-header__voice-status, .persona-header__energy { display: none; }

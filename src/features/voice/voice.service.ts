@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { GoogleGenAI } from "@google/genai";
 import { EdgeTTS } from "edge-tts-universal";
 
-import { type CompanionId } from "@/features/persona";
+import { LANGUAGES, type CompanionId, type ConversationLanguage } from "@/features/persona";
 import { getRedisClient } from "@/infrastructure/redis/client";
 import { APP_CONFIG } from "@/lib/config/app";
 import { getServerEnvironment } from "@/infrastructure/shared/env";
@@ -28,18 +28,15 @@ const voiceByCompanionAndLanguage: Record<
   },
 };
 
-function languageForText(text: string) {
-  if (/[\uac00-\ud7af]/u.test(text)) return "ko-KR";
-  if (/[\u0600-\u06ff]/u.test(text)) return "ar-SA";
-  return "en-US";
-}
+const localeByLanguage: Record<ConversationLanguage, string> = {
+  en: "en-US",
+  ko: "ko-KR",
+  ar: "ar-SA",
+};
 
-function voiceForText(companionId: CompanionId, text: string) {
-  const language = languageForText(text);
-  return (
-    voiceByCompanionAndLanguage[companionId][language] ??
-    voiceByCompanionAndLanguage[companionId]["en-US"]
-  );
+function voiceForLanguage(companionId: CompanionId, language: ConversationLanguage) {
+  const locale = localeByLanguage[language];
+  return voiceByCompanionAndLanguage[companionId][locale] ?? voiceByCompanionAndLanguage[companionId]["en-US"];
 }
 
 function prosodyForCompanion(companionId: CompanionId) {
@@ -50,7 +47,7 @@ function prosodyForCompanion(companionId: CompanionId) {
 
 function cacheKey(input: VoiceSynthesisInput, voice: string) {
   const digest = createHash("sha256")
-    .update(`${input.companionId}:${voice}:${input.text.trim()}`)
+    .update(`${input.companionId}:${input.language}:${voice}:${input.text.trim()}`)
     .digest("hex");
   return `persona-room:voice:${digest}`;
 }
@@ -79,6 +76,7 @@ async function cacheAudio(key: string, audioBase64: string) {
 
 export async function transcribeVoiceAudio(input: {
   audio: File;
+  language: ConversationLanguage;
 }): Promise<{ transcript: string }> {
   const audioData = Buffer.from(await input.audio.arrayBuffer()).toString(
     "base64"
@@ -95,7 +93,7 @@ export async function transcribeVoiceAudio(input: {
         },
       },
       {
-        text: "Transcribe the spoken words exactly. Return only the transcription, with no quotes, explanation, or additional text. Preserve the speaker's language.",
+        text: `Transcribe the spoken words exactly in ${LANGUAGES[input.language].label}. Return only the transcription, with no quotes, explanation, or additional text. Do not translate, summarize, or switch languages.`,
       },
     ],
   });
@@ -108,7 +106,7 @@ export async function synthesizeCompanionVoice(
   input: VoiceSynthesisInput
 ): Promise<VoiceSynthesisResult> {
   const text = input.text.trim();
-  const voice = voiceForText(input.companionId, text);
+  const voice = voiceForLanguage(input.companionId, input.language);
   const key = cacheKey({ ...input, text }, voice);
   const cachedAudio = await getCachedAudio(key);
 
@@ -145,7 +143,7 @@ export async function* streamCompanionVoice(
   input: VoiceSynthesisInput
 ): AsyncGenerator<Uint8Array, void, unknown> {
   const text = input.text.trim();
-  const voice = voiceForText(input.companionId, text);
+  const voice = voiceForLanguage(input.companionId, input.language);
   const key = cacheKey({ ...input, text }, voice);
   const cachedAudio = await getCachedAudio(key);
 

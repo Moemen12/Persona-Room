@@ -1,4 +1,4 @@
-import { type CompanionId } from "@/features/persona/persona.types";
+import { type CompanionId, type ConversationLanguage, type PersonalityId } from "@/features/persona/persona.types";
 import { type AudienceReaction, type VoteOption } from "@/lib/config/app";
 import type { PersonaMood } from "@/features/persona";
 import type * as audienceRepository from "./audience.repository";
@@ -23,6 +23,8 @@ export interface RoomSnapshot {
   id: string;
   audienceEnabled: boolean;
   companionId: CompanionId;
+  language: ConversationLanguage;
+  personalityId: PersonalityId;
   messages: RoomMessage[];
   tally: VoteTally;
 }
@@ -42,4 +44,6 @@ export type RoomBroadcast = {
 } | {
   type: "companion-changed";
   companionId: CompanionId;
+  language: ConversationLanguage;
+  personalityId: PersonalityId;
 };
