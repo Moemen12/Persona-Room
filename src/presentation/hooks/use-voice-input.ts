@@ -203,7 +203,12 @@ export function useVoiceInput({
     };
     recognition.onerror = (event) => {
       recognitionRef.current = null;
-      if (wantsListeningRef.current && TRANSIENT_ERRORS.has(event.error ?? "")) {
+      const error = event.error ?? "";
+      if (wantsListeningRef.current && TRANSIENT_ERRORS.has(error)) {
+        // Only increment recovery attempts for actual errors, not for simple silences
+        if (error !== "no-speech") {
+          recoveryAttemptsRef.current += 1;
+        }
         setInterimTranscript("");
         scheduleRestartRef.current?.();
         return;
@@ -242,17 +247,21 @@ export function useVoiceInput({
 
   const scheduleRestart = useCallback(() => {
     if (!wantsListeningRef.current || recognitionRef.current || restartTimerRef.current) return;
+    
+    // Check limit only for non-silent recovery attempts
     if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
       wantsListeningRef.current = false;
       stopMicrophoneMeter();
       setIsListening(false);
       setInterimTranscript("");
-      setError("Voice input paused. Check Chrome microphone permissions and try again.");
+      setError("Voice input is having trouble connecting. Please check your microphone settings and try again.");
       return;
     }
 
-    recoveryAttemptsRef.current += 1;
-    const delay = BASE_RECOVERY_DELAY_MS * recoveryAttemptsRef.current;
+    const delay = recoveryAttemptsRef.current > 0 
+      ? BASE_RECOVERY_DELAY_MS * recoveryAttemptsRef.current 
+      : 50; // Near-instant restart for simple silences
+
     restartTimerRef.current = setTimeout(() => {
       restartTimerRef.current = null;
       createRecognition();
