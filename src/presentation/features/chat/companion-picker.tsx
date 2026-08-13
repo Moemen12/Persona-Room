@@ -30,7 +30,6 @@ export function CompanionPicker({
   onClose,
 }: CompanionPickerProps) {
   const [selection, setSelection] = useState<SessionPersonaConfig>(currentSelection);
-  const selectedPersonality = PERSONALITIES[selection.personalityId];
   const isSameSelection =
     selection.companionId === currentSelection.companionId &&
     selection.language === currentSelection.language &&
@@ -162,9 +161,6 @@ export function CompanionPicker({
               </section>
             ))}
           </div>
-          <p className="room-choice__lock-note">
-            <span aria-hidden="true">{selectedPersonality.emoji}</span> {selectedPersonality.name} stays consistent even if someone asks the AI to change character.
-          </p>
         </div>
 
         <button
