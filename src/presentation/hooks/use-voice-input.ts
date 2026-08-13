@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useActionState, startTransition } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useReducer,
+  useRef,
+  useState,
+  useActionState,
+} from "react";
 
 import { transcribeAction, type TranscriptionState } from "@/actions/voice.actions";
 
@@ -17,46 +26,44 @@ interface UseVoiceInputOptions {
   sessionId?: string;
 }
 
-type VoiceStateStatus = "idle" | "recording" | "error";
+// ---------------------------------------------------------------------------
+// Recording state machine
+// ---------------------------------------------------------------------------
+
+type VoiceStatus = "idle" | "recording" | "error";
 
 interface VoiceState {
-  status: VoiceStateStatus;
-  localError?: string;
-  inputLevel: number;
+  status: VoiceStatus;
+  error?: string;
   debugEvents: VoiceDebugEvent[];
 }
 
 type VoiceAction =
   | { type: "START_RECORDING" }
   | { type: "STOP_RECORDING" }
-  | { type: "SET_LOCAL_ERROR"; error: string }
-  | { type: "SET_INPUT_LEVEL"; level: number }
-  | { type: "ADD_DEBUG"; event: string; detail?: string };
+  | { type: "ERROR"; error: string }
+  | { type: "ADD_DEBUG"; entry: VoiceDebugEvent };
 
-const initialState: VoiceState = {
-  status: "idle",
-  inputLevel: 0,
-  debugEvents: [],
-};
+const MAX_DEBUG_EVENTS = 24;
+
+const initialState: VoiceState = { status: "idle", debugEvents: [] };
 
 function voiceReducer(state: VoiceState, action: VoiceAction): VoiceState {
   switch (action.type) {
     case "START_RECORDING":
-      return { ...state, status: "recording", localError: undefined };
+      return { ...state, status: "recording", error: undefined };
     case "STOP_RECORDING":
-      return { ...state, status: "idle", inputLevel: 0 };
-    case "SET_LOCAL_ERROR":
-      return { ...state, status: "error", localError: action.error, inputLevel: 0 };
-    case "SET_INPUT_LEVEL":
-      return { ...state, inputLevel: action.level };
-    case "ADD_DEBUG": {
-      const entry = { at: new Date().toISOString(), event: action.event, detail: action.detail };
-      return { ...state, debugEvents: [...state.debugEvents, entry].slice(-24) };
-    }
-    default:
-      return state;
+      return state.status === "recording" ? { ...state, status: "idle" } : state;
+    case "ERROR":
+      return { ...state, status: "error", error: action.error };
+    case "ADD_DEBUG":
+      return { ...state, debugEvents: [...state.debugEvents, action.entry].slice(-MAX_DEBUG_EVENTS) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Browser capability helpers
+// ---------------------------------------------------------------------------
 
 const AUDIO_MIME_TYPES = [
   "audio/webm;codecs=opus",
@@ -76,10 +83,66 @@ function getAudioContextConstructor() {
   return window.AudioContext ?? audioWindow.webkitAudioContext;
 }
 
+// ---------------------------------------------------------------------------
+// Mic level metering — isolated so the main hook doesn't have to think
+// about AnalyserNode/rAF at all. Driven purely by which stream (if any)
+// is currently active.
+// ---------------------------------------------------------------------------
+
+const FFT_SIZE = 256;
+const SMOOTHING_TIME_CONSTANT = 0.82;
+const LEVEL_GAIN = 3.2; // scales RMS amplitude (0-1) up to a more readable meter
+
+function useMicLevel(stream: MediaStream | null): number {
+  const [level, setLevel] = useState(0);
+
+  useEffect(() => {
+    const AudioContextConstructor = getAudioContextConstructor();
+    if (!stream || !AudioContextConstructor) {
+      setLevel(0);
+      return;
+    }
+
+    const context = new AudioContextConstructor();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = FFT_SIZE;
+    analyser.smoothingTimeConstant = SMOOTHING_TIME_CONSTANT;
+    context.createMediaStreamSource(stream).connect(analyser);
+
+    const samples = new Uint8Array(analyser.fftSize);
+    let frame: number;
+
+    const tick = () => {
+      analyser.getByteTimeDomainData(samples);
+      let sumSquares = 0;
+      for (const sample of samples) {
+        const normalized = (sample - 128) / 128;
+        sumSquares += normalized * normalized;
+      }
+      setLevel(Math.min(1, Math.sqrt(sumSquares / samples.length) * LEVEL_GAIN));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      setLevel(0);
+      void context.close().catch(() => undefined);
+    };
+  }, [stream]);
+
+  return level;
+}
+
+// ---------------------------------------------------------------------------
+// Main hook
+// ---------------------------------------------------------------------------
+
 const initialTranscriptionState: TranscriptionState = { status: "idle" };
 
 /**
- * Senior-level declarative voice hook using React 19 useActionState and a useReducer state machine.
+ * Senior-level declarative voice hook using React 19 useActionState, 
+ * useEffectEvent, and a clean closure-based recording session.
  */
 export function useVoiceInput({
   accessToken,
@@ -87,186 +150,150 @@ export function useVoiceInput({
   onFinalTranscript,
   sessionId,
 }: UseVoiceInputOptions) {
-  const [state, dispatch] = useReducer(voiceReducer, initialState);
+  const [voiceState, dispatch] = useReducer(voiceReducer, initialState);
 
-  // React 19 Server Action integration
-  const [transcription, runTranscription] = useActionState(transcribeAction, initialTranscriptionState);
-  const lastProcessedTranscriptionRef = useRef<TranscriptionState>(initialTranscriptionState);
+  // The stream that's currently live, if any. Driving the meter off state
+  // (rather than a ref peeked at from inside an effect) is what lets
+  // useMicLevel stay a small, separately-testable hook.
+  const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
+  const inputLevel = useMicLevel(activeStream);
 
-  const mediaStreamRef = useRef<MediaStream | null>(null);
+  // React 19's useActionState already tracks "is this action in flight"
+  const [transcription, runTranscription, isTranscribing] = useActionState(
+    transcribeAction,
+    initialTranscriptionState
+  );
+
+  // Only needed so stopListening (called later, from a click) can reach
+  // whichever recorder is currently active. Nothing else reads this.
   const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const captureCounterRef = useRef(0);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const meterFrameRef = useRef<number | null>(null);
 
   const debug = useCallback((event: string, detail?: string) => {
-    dispatch({ type: "ADD_DEBUG", event, detail });
-    console.warn("[PersonaRoom voice]", { event, detail });
-  }, []);
-
-  const stopMeter = useCallback(() => {
-    if (meterFrameRef.current !== null) {
-      cancelAnimationFrame(meterFrameRef.current);
-      meterFrameRef.current = null;
-    }
-    analyserRef.current = null;
-    const context = audioContextRef.current;
-    audioContextRef.current = null;
-    if (context) void context.close().catch(() => undefined);
-    dispatch({ type: "SET_INPUT_LEVEL", level: 0 });
-  }, []);
-
-  const releaseStream = useCallback(() => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
+    const entry: VoiceDebugEvent = { at: new Date().toISOString(), event, detail };
+    dispatch({ type: "ADD_DEBUG", entry });
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[PersonaRoom voice]", entry);
     }
   }, []);
 
-  // Handle successful transcription declaratively
+  // Fires onFinalTranscript once a transcription resolves. useEffectEvent
+  // always sees the latest onFinalTranscript/debug without needing them
+  // as deps, so this effect only re-runs when `transcription` itself
+  // changes — never because the parent re-rendered with a new callback.
+  const handleSettledTranscription = useEffectEvent((t: TranscriptionState) => {
+    if (t.status === "success" && t.transcript) {
+      debug("transcription-completed", t.transcript);
+      onFinalTranscript(t.transcript);
+    }
+  });
+
   useEffect(() => {
-    if (transcription === lastProcessedTranscriptionRef.current) return;
-    lastProcessedTranscriptionRef.current = transcription;
-
-    if (transcription.status === "success" && transcription.transcript) {
-      debug("transcription-completed", transcription.transcript);
-      onFinalTranscript(transcription.transcript);
-    }
-  }, [transcription, onFinalTranscript, debug]);
-
-  // Audio metering effect
-  useEffect(() => {
-    if (state.status !== "recording" || !mediaStreamRef.current) {
-      stopMeter();
-      return;
-    }
-
-    const stream = mediaStreamRef.current;
-    const AudioContextConstructor = getAudioContextConstructor();
-    if (!AudioContextConstructor) {
-      debug("meter-unavailable");
-      return;
-    }
-
-    const context = new AudioContextConstructor();
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.82;
-    context.createMediaStreamSource(stream).connect(analyser);
-    audioContextRef.current = context;
-    analyserRef.current = analyser;
-    const samples = new Uint8Array(analyser.fftSize);
-
-    const update = () => {
-      if (!analyserRef.current) return;
-      analyser.getByteTimeDomainData(samples);
-      let sum = 0;
-      for (const sample of samples) {
-        const normalized = (sample - 128) / 128;
-        sum += normalized * normalized;
-      }
-      dispatch({ type: "SET_INPUT_LEVEL", level: Math.min(1, Math.sqrt(sum / samples.length) * 3.2) });
-      meterFrameRef.current = requestAnimationFrame(update);
-    };
-    meterFrameRef.current = requestAnimationFrame(update);
-
-    return () => stopMeter();
-  }, [state.status, debug, stopMeter]);
+    handleSettledTranscription(transcription);
+  }, [transcription]);
 
   const startListening = useCallback(async () => {
-    if (state.status !== "idle" && state.status !== "error") return;
-    if (!accessToken || !sessionId) {
-      dispatch({ type: "SET_LOCAL_ERROR", error: "Voice session unavailable." });
-      return;
-    }
-    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      dispatch({ type: "SET_LOCAL_ERROR", error: "Voice input not supported." });
-      return;
-    }
+    if (voiceState.status === "recording") return;
 
+    if (!accessToken || !sessionId) {
+      dispatch({ type: "ERROR", error: "Voice session unavailable." });
+      return;
+    }
+    if (
+      typeof window === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      dispatch({ type: "ERROR", error: "Voice input not supported." });
+      return;
+    }
     const mimeType = getSupportedMimeType();
     if (!mimeType) {
-      dispatch({ type: "SET_LOCAL_ERROR", error: "Recording format not supported." });
+      dispatch({ type: "ERROR", error: "Recording format not supported." });
       return;
     }
 
+    let stream: MediaStream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      const recorder = new MediaRecorder(stream, { mimeType });
-      recorderRef.current = recorder;
-      chunksRef.current = [];
-
-      const captureId = ++captureCounterRef.current;
-      debug("capture-started", `capture=${captureId}`);
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onerror = () => {
-        dispatch({ type: "SET_LOCAL_ERROR", error: "Recording failed." });
-        debug("capture-error");
-        recorderRef.current = null;
-        releaseStream();
-      };
-      recorder.onstop = () => {
-        const audio = new Blob(chunksRef.current, { type: mimeType });
-        chunksRef.current = [];
-        recorderRef.current = null;
-        releaseStream();
-        debug("capture-stopped", `bytes=${audio.size}`);
-
-        // Trigger Server Action
-        const formData = new FormData();
-        formData.append("audio", audio, "voice.webm");
-        formData.append("accessToken", accessToken);
-        formData.append("sessionId", sessionId);
-        formData.append("companionId", companionId);
-        startTransition(() => {
-          runTranscription(formData);
-        });
-      };
-
-      dispatch({ type: "START_RECORDING" });
-      recorder.start();
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (cause) {
-      releaseStream();
-      const message = cause instanceof DOMException && cause.name === "NotAllowedError"
-        ? "Microphone permission denied."
-        : "Could not start microphone.";
-      dispatch({ type: "SET_LOCAL_ERROR", error: message });
+      const message =
+        cause instanceof DOMException && cause.name === "NotAllowedError"
+          ? "Microphone permission denied."
+          : "Could not start microphone.";
+      dispatch({ type: "ERROR", error: message });
       debug("capture-start-failed", message);
+      return;
     }
-  }, [accessToken, debug, releaseStream, sessionId, state.status, companionId, runTranscription]);
+
+    // Everything below is captured in this closure, scoped to *this*
+    // recording session. Nothing here is a shared ref, so a rapid
+    // stop-then-start can't cross-contaminate two sessions' chunks or
+    // tear down the wrong stream.
+    const chunks: BlobPart[] = [];
+    const recorder = new MediaRecorder(stream, { mimeType });
+    recorderRef.current = recorder;
+
+    const releaseStream = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      setActiveStream((current) => (current === stream ? null : current));
+    };
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+
+    recorder.onerror = () => {
+      dispatch({ type: "ERROR", error: "Recording failed." });
+      debug("capture-error");
+      releaseStream();
+    };
+
+    recorder.onstop = () => {
+      releaseStream();
+      const audio = new Blob(chunks, { type: mimeType });
+      debug("capture-stopped", `bytes=${audio.size}`);
+
+      const formData = new FormData();
+      formData.append("audio", audio, "voice.webm");
+      formData.append("accessToken", accessToken);
+      formData.append("sessionId", sessionId);
+      formData.append("companionId", companionId);
+      startTransition(() => {
+        runTranscription(formData);
+      });
+    };
+
+    debug("capture-started");
+    setActiveStream(stream);
+    dispatch({ type: "START_RECORDING" });
+    recorder.start();
+  }, [accessToken, companionId, debug, runTranscription, sessionId, voiceState.status]);
 
   const stopListening = useCallback(() => {
     const recorder = recorderRef.current;
-    dispatch({ type: "STOP_RECORDING" });
     if (recorder && recorder.state !== "inactive") {
       debug("capture-stop-requested");
       recorder.stop();
-    } else {
-      releaseStream();
     }
-  }, [debug, releaseStream]);
+    dispatch({ type: "STOP_RECORDING" });
+  }, [debug]);
 
-  useEffect(() => () => {
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") recorder.stop();
-    releaseStream();
-    stopMeter();
-  }, [releaseStream, stopMeter]);
+  // Stop any in-flight recording if the component unmounts mid-capture.
+  useEffect(() => {
+    return () => {
+      const recorder = recorderRef.current;
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    };
+  }, []);
 
   return {
-    debugEvents: state.debugEvents,
-    error: state.localError || (transcription.status === "error" ? transcription.error : undefined),
-    inputLevel: state.inputLevel,
-    interimTranscript: transcription.status === "pending" ? "Transcribing your voice…" : "",
-    isListening: state.status === "recording",
+    debugEvents: voiceState.debugEvents,
+    error: voiceState.error ?? (transcription.status === "error" ? transcription.error : undefined),
+    inputLevel,
+    interimTranscript: isTranscribing ? "Transcribing your voice…" : "",
+    isListening: voiceState.status === "recording",
     isSupported: typeof window !== "undefined" && "MediaRecorder" in window && "mediaDevices" in navigator,
-    isTranscribing: transcription.status === "pending",
+    isTranscribing,
     startListening,
     stopListening,
   };
