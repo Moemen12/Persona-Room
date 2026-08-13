@@ -1,23 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useSpeechToText } from "@mazka/react-speech-to-text";
 
-function normalizeSpeechErrorCode(code?: string) {
+/**
+ * Normalizes speech recognition error codes to a consistent kebab-case format.
+ */
+function normalizeErrorCode(code?: string): string | undefined {
   return code?.toLowerCase().replaceAll("_", "-");
 }
 
-function friendlySpeechError(code?: string) {
-  switch (normalizeSpeechErrorCode(code)) {
+/**
+ * Maps technical error codes to user-friendly messages.
+ */
+function getFriendlyErrorMessage(code?: string): string {
+  switch (normalizeErrorCode(code)) {
     case "not-allowed":
     case "service-not-allowed":
-      return "Microphone permission is needed for voice input. Allow it for this site, then try again.";
+      return "Microphone permission is needed. Please allow access and try again.";
     case "audio-capture":
-      return "No microphone was found. Check your browser and system input settings.";
+      return "No microphone detected. Check your system input settings.";
     case "network":
-      return "Voice recognition is unavailable right now. Check your connection and try again.";
+      return "Voice service is unavailable. Check your internet connection.";
     case "no-speech":
-      return "I did not catch that. Speak after the microphone becomes active and try again.";
+      return "I didn't catch that. Please try speaking again.";
     default:
       return "Voice input paused. Please try again.";
   }
@@ -29,333 +35,195 @@ export interface VoiceDebugEvent {
   detail?: string;
 }
 
+/**
+ * Hook to manage audio visualization level (waveform) from a MediaStream.
+ */
+function useAudioMeter(stream: MediaStream | null, debug: (e: string, d?: string) => void) {
+  const [level, setLevel] = useState(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const contextRef = useRef<AudioContext | null>(null);
+  const frameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!stream) {
+      queueMicrotask(() => setLevel(0));
+      return;
+    }
+
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) {
+      debug("meter-unavailable", "AudioContext not supported");
+      return;
+    }
+
+    const context = new AudioContextClass();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8;
+
+    const source = context.createMediaStreamSource(stream);
+    source.connect(analyser);
+
+    contextRef.current = context;
+    analyserRef.current = analyser;
+    debug("meter-started");
+
+    const buffer = new Uint8Array(analyser.fftSize);
+    const update = () => {
+      if (!analyserRef.current) return;
+      analyserRef.current.getByteTimeDomainData(buffer);
+      let sum = 0;
+      for (const sample of buffer) {
+        const v = (sample - 128) / 128;
+        sum += v * v;
+      }
+      setLevel(Math.min(1, Math.sqrt(sum / buffer.length) * 3.5));
+      frameRef.current = requestAnimationFrame(update);
+    };
+
+    frameRef.current = requestAnimationFrame(update);
+
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      void context.close();
+      debug("meter-stopped");
+    };
+  }, [stream, debug]);
+
+  return level;
+}
+
 interface UseVoiceInputOptions {
   lang?: string;
   onFinalTranscript: (transcript: string) => void;
 }
 
-const DEBUG_EVENT_LIMIT = 28;
-const MAX_RECOVERY_ATTEMPTS = 3;
-const BASE_RECOVERY_DELAY_MS = 400;
-const TRANSIENT_ERRORS = new Set(["aborted", "no-speech", "network", "start-error"]);
-
-async function requestMicrophoneAccess() {
-  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-    return { stream: null, error: "getUserMedia unavailable" };
-  }
-  try {
-    return {
-      stream: await navigator.mediaDevices.getUserMedia({ audio: true }),
-    };
-  } catch (cause) {
-    const error = cause instanceof DOMException ? `${cause.name}: ${cause.message}` : String(cause);
-    return { stream: null, error };
-  }
-}
-
-async function getMicrophonePermissionState() {
-  if (typeof navigator === "undefined" || !navigator.permissions?.query) return "unavailable";
-  try {
-    const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
-    return result.state;
-  } catch {
-    return "unknown";
-  }
-}
-
-export function useVoiceInput({
-  lang = "en-US",
-  onFinalTranscript,
-}: UseVoiceInputOptions) {
-  const {
-    error: recognitionError,
-    finalTranscript,
-    interimTranscript,
-    isSupported,
-    isListening,
-    results,
-    abortListening,
-    clearError,
-    resetTranscript,
-    startListening: startRecognition,
-  } = useSpeechToText({
-    continuous: true,
-    interimResults: true,
-    language: lang,
-    maxAlternatives: 1,
-  });
-
-  const wantsListeningRef = useRef(false);
-  const recoveryAttemptsRef = useRef(0);
-  const hasEncounteredNetworkErrorRef = useRef(false);
-  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const microphoneStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const meterFrameRef = useRef<number | null>(null);
-  const meterLastUpdateRef = useRef(0);
-  const scheduleRestartRef = useRef<(() => void) | null>(null);
-  const processedResultsRef = useRef(new Set<string>());
-  const handledErrorRef = useRef<string | undefined>(undefined);
-  const wasListeningRef = useRef(false);
-
-  const [inputLevel, setInputLevel] = useState(0);
-  const [isVoiceRequested, setIsVoiceRequested] = useState(false);
-  const [localError, setLocalError] = useState<string>();
+/**
+ * Declarative hook for voice input with robust diagnostics and automatic desktop recovery.
+ */
+export function useVoiceInput({ lang = "en-US", onFinalTranscript }: UseVoiceInputOptions) {
   const [debugEvents, setDebugEvents] = useState<VoiceDebugEvent[]>([]);
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [microphoneStream, setMicrophoneStream] = useState<MediaStream | null>(null);
+  const [localError, setLocalError] = useState<string>();
+  const [isContinuous, setIsContinuous] = useState(true);
+
+  const networkRetriesRef = useRef(0);
+  const processedResultsRef = useRef(new Set<string>());
 
   const debug = useCallback((event: string, detail?: string) => {
-    const entry = { at: new Date().toISOString(), event, detail };
-    setDebugEvents((previous) => [...previous, entry].slice(-DEBUG_EVENT_LIMIT));
-    console.warn("[PersonaRoom voice]", entry);
+    // Defer state updates to avoid React cascading render warnings
+    queueMicrotask(() => {
+      setDebugEvents((prev) => [...prev, { at: new Date().toISOString(), event, detail }].slice(-24));
+    });
+    console.warn(`[Voice] ${event}`, detail || "");
   }, []);
 
-  const debugLater = useCallback((event: string, detail?: string) => {
-    queueMicrotask(() => debug(event, detail));
-  }, [debug]);
+  // Library-backed speech recognition
+  const {
+    error: recognitionError,
+    interimTranscript,
+    isListening,
+    isSupported,
+    results,
+    startListening: startLibrary,
+    stopListening: stopLibrary,
+    abortListening,
+    clearError,
+  } = useSpeechToText({
+    continuous: isContinuous,
+    interimResults: true,
+    language: lang,
+  });
 
-  const stopMicrophoneMeter = useCallback(() => {
-    if (meterFrameRef.current !== null) {
-      cancelAnimationFrame(meterFrameRef.current);
-      meterFrameRef.current = null;
-    }
-    microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
-    microphoneStreamRef.current = null;
-    analyserRef.current = null;
-    const audioContext = audioContextRef.current;
-    audioContextRef.current = null;
-    if (audioContext) void audioContext.close().catch(() => undefined);
-    setInputLevel(0);
-  }, []);
+  const inputLevel = useAudioMeter(isListening ? microphoneStream : null, debug);
 
-  const startMicrophoneMeter = useCallback((stream: MediaStream) => {
-    if (typeof window === "undefined") return;
-    const audioWindow = window as Window & { webkitAudioContext?: typeof AudioContext };
-    const AudioContextConstructor = window.AudioContext ?? audioWindow.webkitAudioContext;
-    if (!AudioContextConstructor) {
-      debug("meter-unavailable", "AudioContext is unavailable; continuing without waveform");
-      return;
-    }
-
-    debug("meter-start", `audioContext=${AudioContextConstructor.name || "unknown"}`);
-    stopMicrophoneMeter();
-    microphoneStreamRef.current = stream;
-    const audioContext = new AudioContextConstructor();
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.82;
-    audioContext.createMediaStreamSource(stream).connect(analyser);
-    audioContextRef.current = audioContext;
-    analyserRef.current = analyser;
-    const samples = new Uint8Array(analyser.fftSize);
-
-    const updateMeter = (now: number) => {
-      if (!analyserRef.current) return;
-      if (now - meterLastUpdateRef.current >= 50) {
-        meterLastUpdateRef.current = now;
-        analyser.getByteTimeDomainData(samples);
-        let sum = 0;
-        for (const sample of samples) {
-          const normalized = (sample - 128) / 128;
-          sum += normalized * normalized;
-        }
-        setInputLevel(Math.min(1, Math.sqrt(sum / samples.length) * 3.2));
-      }
-      meterFrameRef.current = requestAnimationFrame(updateMeter);
-    };
-
-    meterFrameRef.current = requestAnimationFrame(updateMeter);
-  }, [debug, stopMicrophoneMeter]);
-
-  const clearRestartTimer = useCallback(() => {
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
-  }, []);
-
-  const scheduleRestart = useCallback(() => {
-    if (!wantsListeningRef.current || restartTimerRef.current) return;
-
-    if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
-      wantsListeningRef.current = false;
-      setIsVoiceRequested(false);
-      abortListening();
-      stopMicrophoneMeter();
-      clearError();
-      const message = "Voice input is having trouble connecting. Please check your microphone settings and try again.";
-      debug("recovery-exhausted", message);
-      setLocalError(message);
-      return;
-    }
-
-    // Abort previous recognition instance before scheduling restart
-    abortListening();
-
-    const delay = BASE_RECOVERY_DELAY_MS * (recoveryAttemptsRef.current + 1);
-    const continuous = !hasEncounteredNetworkErrorRef.current;
-    debug("recovery-scheduled", `delay=${delay}ms, attempts=${recoveryAttemptsRef.current}, continuous=${continuous}`);
-
-    restartTimerRef.current = setTimeout(() => {
-      restartTimerRef.current = null;
-      if (!wantsListeningRef.current) return;
-      clearError();
-      debug("recovery-fired", `continuous=${continuous}`);
-      try {
-        startRecognition({
-          continuous,
-          interimResults: true,
-          language: lang,
-          maxAlternatives: 1,
-        });
-      } catch (cause) {
-        debug("recovery-start-throw", cause instanceof Error ? cause.message : String(cause));
-      }
-    }, delay);
-  }, [abortListening, clearError, debug, lang, startRecognition, stopMicrophoneMeter]);
-
+  // Handle results declaratively
   useEffect(() => {
-    scheduleRestartRef.current = scheduleRestart;
-    return () => {
-      scheduleRestartRef.current = null;
-    };
-  }, [scheduleRestart]);
-
-  useEffect(() => {
-    for (const result of results) {
-      if (!result.isFinal || !result.transcript.trim()) continue;
-      const key = `${result.timestamp.getTime()}:${result.transcript}`;
-      if (processedResultsRef.current.has(key)) continue;
+    results.forEach((res) => {
+      if (!res.isFinal) return;
+      const key = `${res.timestamp.getTime()}-${res.transcript}`;
+      if (processedResultsRef.current.has(key)) return;
       processedResultsRef.current.add(key);
-      recoveryAttemptsRef.current = 0;
-      debugLater("final-transcript", result.transcript.trim());
-      onFinalTranscript(result.transcript.trim());
-    }
-  }, [debugLater, onFinalTranscript, results]);
+      networkRetriesRef.current = 0;
+      setIsContinuous(true);
+      debug("final-result", res.transcript);
+      onFinalTranscript(res.transcript);
+    });
+  }, [results, onFinalTranscript, debug]);
 
+  // Handle errors and recovery declaratively
   useEffect(() => {
     if (!recognitionError) return;
-    const errorKey = `${recognitionError.code}:${recognitionError.message}`;
-    if (handledErrorRef.current === errorKey) return;
-    handledErrorRef.current = errorKey;
-    const code = normalizeSpeechErrorCode(recognitionError.code);
-    debugLater("recognition-error", `code=${recognitionError.code}, normalized=${code}, message=${recognitionError.message || "none"}`);
+    const code = normalizeErrorCode(recognitionError.code);
+    debug("error", `${code}: ${recognitionError.message}`);
 
-    if (wantsListeningRef.current && code && TRANSIENT_ERRORS.has(code)) {
-      if (code === "network") {
-        hasEncounteredNetworkErrorRef.current = true;
-        debugLater("network-fallback-activated", "switching to continuous=false");
+    if (code === "network" && isVoiceActive) {
+      networkRetriesRef.current += 1;
+      debug("network-retry", `attempt ${networkRetriesRef.current}`);
+      
+      if (networkRetriesRef.current >= 2) {
+        setIsContinuous(false);
+        debug("fallback-activated", "switching to single-shot mode");
       }
-      if (code !== "no-speech") {
-        recoveryAttemptsRef.current += 1;
-      }
-      scheduleRestartRef.current?.();
-      return;
-    }
 
-    wantsListeningRef.current = false;
-    setIsVoiceRequested(false);
-    stopMicrophoneMeter();
-  }, [debugLater, recognitionError, stopMicrophoneMeter]);
-
-  useEffect(() => {
-    if (isListening) {
-      wasListeningRef.current = true;
-      return;
+      const timer = setTimeout(() => {
+        if (isVoiceActive) {
+          clearError();
+          startLibrary();
+        }
+      }, 500);
+      return () => clearTimeout(timer);
     }
-    if (!wantsListeningRef.current || !wasListeningRef.current || recognitionError) return;
-    wasListeningRef.current = false;
-    debugLater("recognition-end", "library reported listening=false without an error; recovering");
-    recoveryAttemptsRef.current += 1;
-    scheduleRestartRef.current?.();
-  }, [debugLater, isListening, recognitionError]);
+  }, [recognitionError, isVoiceActive, startLibrary, clearError, debug]);
 
   const startListening = useCallback(async () => {
-    debug("start-requested", `supported=${isSupported}, secureContext=${typeof window !== "undefined" ? window.isSecureContext : false}`);
+    debug("start-requested");
     if (!isSupported) {
-      setLocalError("Voice input is not supported in this browser.");
-      return;
-    }
-    if (wantsListeningRef.current && isListening) return;
-
-    clearRestartTimer();
-    clearError();
-    setLocalError(undefined);
-    recoveryAttemptsRef.current = 0;
-    hasEncounteredNetworkErrorRef.current = false;
-    wasListeningRef.current = false;
-    processedResultsRef.current.clear();
-    handledErrorRef.current = undefined;
-    resetTranscript();
-    wantsListeningRef.current = true;
-    setIsVoiceRequested(true);
-
-    const permissionState = await getMicrophonePermissionState();
-    debug("permission-state", permissionState);
-    const microphoneAccess = await requestMicrophoneAccess();
-    if (!wantsListeningRef.current) {
-      microphoneAccess.stream?.getTracks().forEach((track) => track.stop());
-      debug("start-cancelled", "user stopped while microphone permission was pending");
-      return;
-    }
-    if (!microphoneAccess.stream) {
-      wantsListeningRef.current = false;
-      setIsVoiceRequested(false);
-      const detail = microphoneAccess.error ? `${permissionState}; ${microphoneAccess.error}` : permissionState;
-      debug("microphone-failed", detail);
-      setLocalError(`Microphone could not start (${detail}). Check site and system microphone permissions.`);
+      setLocalError("Speech recognition not supported.");
       return;
     }
 
-    const track = microphoneAccess.stream.getAudioTracks()[0];
-    debug("microphone-granted", track ? `label=${track.label || "hidden"}, state=${track.readyState}, enabled=${track.enabled}` : "no-audio-track");
-    startMicrophoneMeter(microphoneAccess.stream);
-    debug("recognition-config", "continuous=true, interim=true, engine=@mazka/react-speech-to-text");
     try {
-      startRecognition({
-        continuous: true,
-        interimResults: true,
-        language: lang,
-        maxAlternatives: 1,
-      });
-    } catch (cause) {
-      debug("start-throw", cause instanceof Error ? cause.message : String(cause));
-      setLocalError("Voice input could not start. Please try again.");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicrophoneStream(stream);
+      setIsVoiceActive(true);
+      setLocalError(undefined);
+      clearError();
+      networkRetriesRef.current = 0;
+      setIsContinuous(true);
+      startLibrary();
+    } catch (err) {
+      debug("mic-denied", err instanceof Error ? err.message : String(err));
+      setLocalError("Microphone access denied.");
     }
-  }, [clearError, clearRestartTimer, debug, isListening, isSupported, lang, resetTranscript, startMicrophoneMeter, startRecognition]);
+  }, [isSupported, startLibrary, clearError, debug]);
 
   const stopListening = useCallback(() => {
     debug("stop-requested");
-    wantsListeningRef.current = false;
-    setIsVoiceRequested(false);
-    recoveryAttemptsRef.current = 0;
-    hasEncounteredNetworkErrorRef.current = false;
-    wasListeningRef.current = false;
-    clearRestartTimer();
+    setIsVoiceActive(false);
+    stopLibrary();
     abortListening();
-    clearError();
-    resetTranscript();
-    stopMicrophoneMeter();
-  }, [abortListening, clearError, clearRestartTimer, debug, resetTranscript, stopMicrophoneMeter]);
+    if (microphoneStream) {
+      microphoneStream.getTracks().forEach((t) => t.stop());
+      setMicrophoneStream(null);
+    }
+  }, [stopLibrary, abortListening, microphoneStream, debug]);
 
-  useEffect(() => {
-    return () => {
-      wantsListeningRef.current = false;
-      clearRestartTimer();
-      abortListening();
-      stopMicrophoneMeter();
-    };
-  }, [abortListening, clearRestartTimer, stopMicrophoneMeter]);
+  const displayError = useMemo(() => {
+    if (localError) return localError;
+    if (recognitionError) return getFriendlyErrorMessage(recognitionError.code);
+    return undefined;
+  }, [localError, recognitionError]);
 
   return {
     debugEvents,
-    error: localError ?? (recognitionError ? friendlySpeechError(recognitionError.code) : undefined),
+    error: displayError,
     inputLevel,
     interimTranscript,
-    isListening: isVoiceRequested && isListening,
+    isListening: isVoiceActive && isListening,
     isSupported,
     startListening,
     stopListening,
-    finalTranscript,
   };
 }
