@@ -2,7 +2,7 @@
 
 import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { type FormEvent, useCallback, useReducer, useState, useActionState, useEffect, startTransition } from "react";
+import { type FormEvent, useCallback, useReducer, useState, useActionState, useEffect, startTransition, useRef } from "react";
 
 import type { RoomBroadcast } from "@/features/audience";
 import type { SessionBootstrap } from "@/features/auth";
@@ -236,6 +236,7 @@ const initialSessionState: SessionState = { status: "idle" };
 export function ChatExperience() {
   const [state, dispatch] = useReducer(chatClientReducer, initialChatState);
   const [sessionState, runUpdateCompanion] = useActionState(updateCompanionAction, initialSessionState);
+  const lastProcessedSessionStateRef = useRef<SessionState>(initialSessionState);
   const { reaction, triggerReaction } = useAudienceReaction();
   const { play } = useInterfaceSound();
   const companionId =
@@ -402,17 +403,23 @@ export function ChatExperience() {
 
   // Handle companion update success declaratively
   useEffect(() => {
+    if (sessionState === lastProcessedSessionStateRef.current) return;
+    lastProcessedSessionStateRef.current = sessionState;
+
     if (sessionState.status === "success" && sessionState.bootstrap) {
       const bootstrap = sessionState.bootstrap;
       setMessages(bootstrap.messages.map(asUiMessage));
       dispatch({ type: "companion-updated", bootstrap, mood: bootstrap.mood });
-      if (state.identity) {
+      
+      const auth = getSafeChatAuth(CHAT_AUTH_STORAGE_KEY);
+      if (auth) {
         setSafeChatAuth(CHAT_AUTH_STORAGE_KEY, {
+          ...auth,
           sessionId: bootstrap.session.id,
-          accessToken: state.identity.accessToken,
           companionId: bootstrap.session.companionId,
         });
       }
+      
       window.localStorage.setItem(
         `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`,
         "confirmed"
@@ -424,7 +431,7 @@ export function ChatExperience() {
         error: sessionState.error || "The companion change could not be saved.",
       });
     }
-  }, [sessionState, play, state.identity, setMessages]);
+  }, [sessionState, play, setMessages]);
 
   const chooseCompanion = async (companionId: CompanionId) => {
     if (!state.identity) return;
