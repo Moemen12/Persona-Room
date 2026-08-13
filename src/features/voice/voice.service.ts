@@ -142,39 +142,10 @@ export async function synthesizeCompanionVoice(
 export async function* streamCompanionVoice(
   input: VoiceSynthesisInput
 ): AsyncGenerator<Uint8Array, void, unknown> {
-  const text = input.text.trim();
-  const voice = voiceForLanguage(input.companionId, input.language);
-  const key = cacheKey({ ...input, text }, voice);
-  const cachedAudio = await getCachedAudio(key);
-
-  if (cachedAudio) {
-    yield Buffer.from(cachedAudio, "base64");
-    return;
-  }
-
-  const chunks: Buffer[] = [];
-  let completed = false;
-
-  try {
-    // Use the more stable synthesize path to avoid WebSocket "mask" errors in production
-    const synthesis = await new EdgeTTS(
-      text,
-      voice,
-      prosodyForCompanion(input.companionId)
-    ).synthesize();
-    
-    const audioBuffer = Buffer.from(await synthesis.audio.arrayBuffer());
-    chunks.push(audioBuffer);
-    
-    // Yield in small chunks to simulate streaming for the frontend MediaSource
-    const chunkSize = 16 * 1024; // 16KB
-    for (let i = 0; i < audioBuffer.length; i += chunkSize) {
-      yield audioBuffer.subarray(i, i + chunkSize);
-    }
-    completed = true;
-  } finally {
-    if (completed && chunks.length > 0) {
-      await cacheAudio(key, Buffer.concat(chunks).toString("base64"));
-    }
+  const result = await synthesizeCompanionVoice(input);
+  const audioBuffer = Buffer.from(result.audioBase64, "base64");
+  const chunkSize = 16 * 1024;
+  for (let i = 0; i < audioBuffer.length; i += chunkSize) {
+    yield audioBuffer.subarray(i, i + chunkSize);
   }
 }
