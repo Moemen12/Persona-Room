@@ -1115,3 +1115,91 @@ body { background: var(--ink); }
   .audience-header h1 { font-size: clamp(2rem, 10vw, 2.7rem); }
   .audience-spotlight { padding: 16px; }
 }
+
+/* Public room viewport fit: the page stays still; content surfaces own their scroll. */
+@media (min-width: 851px) {
+  .audience-shell {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+  .audience-room {
+    height: 100%;
+    max-height: 100%;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .audience-header { min-height: 54px; }
+  .audience-spotlight { min-height: 112px; }
+  .audience-transcript {
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .audience-transcript__body {
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+  .vote-panel {
+    position: static;
+    max-height: calc(100dvh - 164px);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 850px) {
+  .audience-shell { min-height: 100dvh; overflow-x: hidden; }
+  .audience-room { min-height: calc(100dvh - 32px); }
+}
+
+/* Light mode is CSS-only: it follows the user's OS preference without client state or hydration work. */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --ink: #f4f6f9;
+    --ink-deep: #ffffff;
+    --surface: #ffffff;
+    --surface-strong: #f8fafc;
+    --surface-raised: #eef2f7;
+    --line: #d8e0e9;
+    --line-strong: #a9b7c8;
+    --violet: #6256c4;
+    --violet-bright: #51479e;
+    --violet-pale: #302b61;
+    --lavender: #253142;
+    --muted: #637184;
+    --text: #182334;
+    --danger: #b4233d;
+    --shadow: 0 14px 34px rgba(39, 53, 72, 0.12);
+  }
+  body { color: var(--text); background: var(--ink); }
+  .persona-shell, .audience-shell { background: linear-gradient(180deg, #f8fafc 0%, #f1f4f8 100%); }
+  .persona-profile, .chat-card, .audience-transcript, .vote-panel, .audience-spotlight { background: var(--surface); box-shadow: var(--shadow); }
+  .chat-card__topline, .audience-transcript__header, .composer { background: var(--surface-strong); }
+  .message-list, .audience-transcript__body { background: #f6f8fb; }
+  .message-bubble { border-color: #d2dce7; background: #ffffff; color: #253142; }
+  .message-bubble--user { border-color: #6256c4; background: #6256c4; color: #ffffff; }
+  .composer__field { border-color: #cbd6e2; background: #ffffff; }
+  .composer__field:focus-within { background: #ffffff; }
+  .composer textarea { color: #182334; }
+  .composer__mic { border-color: #cbd6e2; background: #f2f5f8; color: #35445a; }
+  .assistant-typing, .proactive-nudge, .vote-option, .companion-choice, .room-choice { border-color: #d2dce7; background: #f8fafc; }
+  .vote-option:hover:not(:disabled), .vote-option--selected, .companion-choice:hover:not(:disabled), .companion-choice--selected, .room-choice:hover:not(:disabled), .room-choice--selected { border-color: #6256c4; background: #eef0ff; }
+  .companion-picker { background: rgba(21, 32, 46, 0.36); }
+  .companion-picker__panel { border-color: #d2dce7; background: #ffffff; box-shadow: 0 24px 60px rgba(39, 53, 72, 0.18); }
+  .companion-picker__confirm { background: #6256c4; }
+}
+
+.personality-groups { display: grid; gap: 14px; }
+.personality-group { display: grid; gap: 7px; }
+.personality-group__heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.personality-group__heading strong { color: var(--lavender); font-size: 0.74rem; }
+.personality-group__heading span { color: var(--muted); font-size: 0.63rem; text-align: right; }
+@media (max-width: 520px) {
+  .personality-group__heading { display: grid; gap: 2px; }
+  .personality-group__heading span { text-align: left; }
+}

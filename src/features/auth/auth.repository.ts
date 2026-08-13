@@ -1,4 +1,5 @@
 import {
+  PERSONALITY_IDS,
   type CompanionId,
   type ConversationLanguage,
   type PersonalityId,
@@ -16,8 +17,9 @@ function toConversationLanguage(value: unknown): ConversationLanguage {
 }
 
 function toPersonalityId(value: unknown): PersonalityId {
-  const supported = ["playful", "melancholic", "magnetic", "mischievous", "roaster", "dramatic"] as const;
-  return supported.includes(value as PersonalityId) ? (value as PersonalityId) : "playful";
+  return PERSONALITY_IDS.includes(value as PersonalityId)
+    ? (value as PersonalityId)
+    : "playful";
 }
 
 function toPersonaUser(row: Record<string, unknown>): PersonaUser {

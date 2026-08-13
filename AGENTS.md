@@ -66,9 +66,9 @@ Use the exact product name **Persona Room** and persona name **Rina**. The publi
 
 Rina’s supported expressions are exactly `neutral`, `happy`, `surprised`, and `sad/thoughtful`. She speaks in one to two natural, playful, warm sentences; never uses corporate language or says “As an AI”; responds visibly to the user’s emotional tone; occasionally recalls durable user memories; and reacts in-character to audience cues. She must not provide programming, coding, debugging, or other technical-help answers; she should stay in character and gently redirect those requests to conversation.
 
-Room identity (Companion, Language, and Personality) is locked during setup. The AI must strictly adhere to the selected language (English, Korean, or Arabic) and personality type, declining any in-chat requests to change character or language. Personality types (e.g., Playful, Melancholic, Magnetic) have fixed behavioral boundaries that must be preserved throughout the session.
+Room identity (Companion, Language, and Personality) is locked during setup. The AI must strictly adhere to the selected language (English, Korean, or Arabic) and personality type, declining any in-chat requests to change character or language. Personality types are sharply distinct archetypes grouped by energy; each has a fixed emotional baseline and behavioral boundaries that must be preserved throughout the session. A Fiery personality must remain angry and must not drift into Playful, while Sultry may be romantic and sensual but never explicit.
 
-The UI must keep route-specific loading, error, and not-found states product-centric, cinematic, mobile-friendly, and consistent with the active companion. It must not show a stale default companion during room loading or rely on users clearing browser storage to recover. Validate and safely fall back from malformed local storage rather than allowing runtime exceptions.
+The UI must keep route-specific loading, error, and not-found states product-centric, clear, mobile-friendly, and consistent with the active companion. Text generation and voice preparation share one visible "gathering a thought" state; do not expose separate internal pipeline labels. It must not show a stale default companion during room loading or rely on users clearing browser storage to recover. Validate and safely fall back from malformed local storage rather than allowing runtime exceptions.
 
 ## Critical UX & Ordering Rules (MANDATORY)
 
@@ -79,8 +79,10 @@ The UI must keep route-specific loading, error, and not-found states product-cen
 5. **Server Action Placement**: Server Actions belong under `src/actions`, not inside `src/features`. Features expose domain types and service/repository behavior through public barrels; infrastructure dependencies flow inward and must remain replaceable.
 6. **No Legacy or Duplicate App Structures**: Do not create unused `pages/` folders, duplicate route trees, or empty placeholder files. Keep Tailwind utilities and shared design tokens in the existing global stylesheet instead of replacing the design system with scattered component CSS.
 7. **Interaction State Discipline**: Use React 19 declarative patterns, structured state or reducers for related interaction fields, and focused hooks for genuine external synchronization. Avoid giant mixed-responsibility components and imperative fetch chains.
-8. **Atomic Voice-Text Reveal**: Assistant messages must remain hidden (or in a subtle "preparing" state) until the neural voice is ready. Text and audio must reveal atomically to ensure a cinematic, high-fidelity experience.
+8. **Atomic Voice-Text Reveal**: Assistant messages must remain hidden (or in a subtle "preparing" state) until the neural voice is ready. Text and audio must reveal atomically to ensure a clear, high-fidelity experience.
 9. **Shared Room Cues**: Replace disconnected "voting" with "Room Cues" that allow audience members to steer the conversation naturally. These cues are folded into the AI's next response as organic narrative directions.
+10. **Viewport-Fit Public Room**: On desktop, `/room/[id]` must fit within the viewport without page scrolling. Only the transcript or cue list may scroll internally when content exceeds available space.
+11. **Theme Simplicity**: Light mode should prefer CSS media queries and shared variables over client-side theme state when a toggle is not required.
 
 ## Validation Before Finishing
 

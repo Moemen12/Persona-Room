@@ -7,6 +7,7 @@ import {
   COMPANIONS,
   LANGUAGES,
   PERSONALITIES,
+  PERSONALITY_GROUPS,
   type CompanionId,
   type ConversationLanguage,
   type PersonalityId,
@@ -130,26 +131,37 @@ export function CompanionPicker({
             <span className="eyebrow">03 / PERSONALITY</span>
             <span>One consistent personality for the whole room.</span>
           </div>
-          <div className="room-choice-grid room-choice-grid--personality">
-            {Object.values(PERSONALITIES).map((personality) => {
-              const selected = personality.id === selection.personalityId;
-              return (
-                <button
-                  key={personality.id}
-                  className={cn("room-choice room-choice--personality", selected && "room-choice--selected")}
-                  type="button"
-                  onClick={() => selectPersonality(personality.id)}
-                  disabled={isChanging}
-                  aria-pressed={selected}
-                >
-                  <span className="room-choice__emoji" aria-hidden="true">{personality.emoji}</span>
-                  <span className="room-choice__copy">
-                    <strong>{personality.name}</strong>
-                    <span>{personality.tagline}</span>
-                  </span>
-                </button>
-              );
-            })}
+          <div className="personality-groups">
+            {PERSONALITY_GROUPS.map(group => (
+              <section className="personality-group" key={group.id}>
+                <div className="personality-group__heading">
+                  <strong>{group.label}</strong>
+                  <span>{group.description}</span>
+                </div>
+                <div className="room-choice-grid room-choice-grid--personality">
+                  {group.personalityIds.map(personalityId => {
+                    const personality = PERSONALITIES[personalityId];
+                    const selected = personality.id === selection.personalityId;
+                    return (
+                      <button
+                        key={personality.id}
+                        className={cn("room-choice room-choice--personality", selected && "room-choice--selected")}
+                        type="button"
+                        onClick={() => selectPersonality(personality.id)}
+                        disabled={isChanging}
+                        aria-pressed={selected}
+                      >
+                        <span className="room-choice__emoji" aria-hidden="true">{personality.emoji}</span>
+                        <span className="room-choice__copy">
+                          <strong>{personality.name}</strong>
+                          <span>{personality.tagline}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
           <p className="room-choice__lock-note">
             <span aria-hidden="true">{selectedPersonality.emoji}</span> {selectedPersonality.name} stays consistent even if someone asks the AI to change character.

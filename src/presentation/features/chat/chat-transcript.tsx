@@ -119,7 +119,7 @@ export function ChatTranscript({
               />
             );
           })}
-          {isStreaming && (latestMessage?.role === "user" || voiceSyncEnabled) ? (
+          {(isStreaming || (voiceSyncEnabled && narration.waiting && !narration.started && !narration.completed)) && (latestMessage?.role === "user" || voiceSyncEnabled) ? (
             <div className="assistant-typing" role="status" aria-live="polite">
               <span className="assistant-typing__spark" aria-hidden="true">
                 <Sparkles size={14} />

@@ -61,11 +61,6 @@ export function ChatHeader({
         <span>{viewerCount} watching</span>
       </div>
       <div className="persona-header__actions">
-        {isVoicePreparing ? (
-          <span className="persona-header__voice-status" role="status" aria-live="polite">
-            Preparing voice…
-          </span>
-        ) : null}
         <button
           className="icon-button"
           type="button"
