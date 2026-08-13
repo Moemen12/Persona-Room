@@ -237,7 +237,7 @@ export function ChatExperience() {
   const [state, dispatch] = useReducer(chatClientReducer, initialChatState);
   const [sessionState, runUpdateCompanion] = useActionState(updateCompanionAction, initialSessionState);
   const lastProcessedSessionStateRef = useRef<SessionState>(initialSessionState);
-  const { reaction, triggerReaction } = useAudienceReaction();
+  const { reactions, triggerReaction } = useAudienceReaction();
   const { play } = useInterfaceSound();
   const companionId =
     state.identity?.bootstrap.session.companionId ??
@@ -364,12 +364,7 @@ export function ChatExperience() {
         const definition = AUDIENCE_REACTIONS.find(
           item => item.value === event.reaction
         );
-        triggerReaction({
-          kind: event.reaction,
-          label: definition
-            ? `${definition.emoji} ${definition.label}`
-            : "The room reacted",
-        });
+        triggerReaction(event.reaction, definition?.emoji ?? "✨");
         return;
       }
       if (event.type === "vote-tally" || event.type === "persona-reaction") {
@@ -520,7 +515,7 @@ export function ChatExperience() {
 
   return (
     <main className="persona-shell stage-enter">
-      <AudienceReactionOverlay reaction={reaction} />
+      <AudienceReactionOverlay reactions={reactions} />
       <div className="ambient-orb ambient-orb--violet" aria-hidden="true" />
       <div className="ambient-orb ambient-orb--lavender" aria-hidden="true" />
       <div className="stage-sweep" aria-hidden="true" />

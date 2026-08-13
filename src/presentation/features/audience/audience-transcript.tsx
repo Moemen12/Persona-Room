@@ -1,13 +1,12 @@
 "use client";
 
 import { Radio } from "lucide-react";
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import type { RoomBroadcast, RoomSnapshot } from "@/features/audience";
 import { AUDIENCE_REACTIONS, type AudienceReaction } from "@/lib/config/app";
 import { sortRoomMessages } from "@/lib/message-order";
 import type { PersonaMood } from "@/features/persona";
-import { VOTE_OPTIONS } from "@/lib/config/app";
 import { submitAudienceReactionAction } from "@/actions/audience.actions";
 import { MessageBubble } from "@/presentation/components/message-bubble";
 import { useAudienceReaction } from "@/presentation/hooks/use-audience-reaction";
@@ -39,9 +38,8 @@ export function AudienceTranscript({
   }));
   const [, setMood] = useState<PersonaMood>("neutral");
   const [isPerformerThinking, setIsPerformerThinking] = useState(false);
-  const [isReactionPending, startReactionTransition] = useTransition();
-  const { reaction, triggerReaction } = useAudienceReaction();
-  const recentLocalReactionRef = useRef<AudienceReaction | undefined>(undefined);
+  const [, startReactionTransition] = useTransition();
+  const { reactions, triggerReaction } = useAudienceReaction();
   const transcriptRef = useTranscriptAutoScroll({
     messageCount: snapshot.messages.length,
     lastMessageId: snapshot.messages.at(-1)?.id,
@@ -58,7 +56,7 @@ export function AudienceTranscript({
         onMoodChange?.("neutral");
         setIsPerformerThinking(false);
         onListeningChange?.(false);
-        triggerReaction({ kind: "welcome", label: `${event.companionId === "joon" ? "Joon" : "Rina"} is taking the stage` });
+        triggerReaction("welcome", "👋");
         setSnapshot((current) => ({
           ...current,
           companionId: event.companionId,
@@ -69,18 +67,8 @@ export function AudienceTranscript({
 
       if (event.type === "audience-reaction") {
         onPerformance?.();
-        const isRecentLocalReaction = recentLocalReactionRef.current === event.reaction;
-        if (isRecentLocalReaction) {
-          recentLocalReactionRef.current = undefined;
-          return;
-        }
-        if (!isRecentLocalReaction) {
-          const definition = AUDIENCE_REACTIONS.find((item) => item.value === event.reaction);
-          triggerReaction({
-            kind: event.reaction,
-            label: definition ? `${definition.emoji} ${definition.label}` : "The room reacted",
-          });
-        }
+        const definition = AUDIENCE_REACTIONS.find((item) => item.value === event.reaction);
+        triggerReaction(event.reaction, definition?.emoji ?? "✨");
         return;
       }
 
@@ -88,13 +76,10 @@ export function AudienceTranscript({
         setMood("surprised");
         onMoodChange?.("surprised");
         onPerformance?.();
-        const optionLabel = event.option
-          ? VOTE_OPTIONS.find((option) => option.value === event.option)?.label
-          : undefined;
-        triggerReaction({
-          kind: event.type === "vote-tally" ? "vote" : "surprise",
-          label: optionLabel ? `The room chose: ${optionLabel}` : "The room caught her attention",
-        });
+        triggerReaction(
+          event.type === "vote-tally" ? "vote" : "surprise",
+          event.type === "vote-tally" ? "🗳️" : "✨"
+        );
       }
 
       const incomingMessage = "message" in event ? event.message : undefined;
@@ -129,22 +114,15 @@ export function AudienceTranscript({
 
   const handleReaction = (nextReaction: AudienceReaction) => {
     const definition = AUDIENCE_REACTIONS.find((item) => item.value === nextReaction);
-    recentLocalReactionRef.current = nextReaction;
-    triggerReaction({
-      kind: nextReaction,
-      label: definition ? `${definition.emoji} ${definition.label}` : "The room reacted",
-    });
+    triggerReaction(nextReaction, definition?.emoji ?? "✨");
     startReactionTransition(async () => {
-      const result = await submitAudienceReactionAction(roomId, nextReaction);
-      if (!result.success) {
-        triggerReaction({ kind: "surprise", label: result.error });
-      }
+      await submitAudienceReactionAction(roomId, nextReaction);
     });
   };
 
   return (
     <section className="audience-transcript">
-      <AudienceReactionOverlay reaction={reaction} />
+      <AudienceReactionOverlay reactions={reactions} />
       <div className="audience-transcript__header">
         <span>
           <Radio aria-hidden="true" size={15} />
@@ -185,7 +163,6 @@ export function AudienceTranscript({
       </div>
 
       <div className="audience-reactions" aria-label="Send a room reaction">
-        <span className="audience-reactions__label">React to the moment</span>
         <div className="audience-reactions__buttons">
           {AUDIENCE_REACTIONS.map((candidate) => (
             <button
@@ -193,11 +170,9 @@ export function AudienceTranscript({
               type="button"
               className="audience-reaction-button"
               onClick={() => handleReaction(candidate.value)}
-              disabled={isReactionPending}
               aria-label={candidate.label}
             >
               <span aria-hidden="true">{candidate.emoji}</span>
-              <span>{candidate.label}</span>
             </button>
           ))}
         </div>
