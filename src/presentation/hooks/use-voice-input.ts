@@ -81,6 +81,7 @@ interface UseVoiceInputOptions {
 const DEBUG_EVENT_LIMIT = 24;
 
 const MAX_RECOVERY_ATTEMPTS = 4;
+const MAX_NETWORK_RETRIES = 2;
 const BASE_RECOVERY_DELAY_MS = 180;
 const TRANSIENT_ERRORS = new Set(["aborted", "no-speech", "network"]);
 
@@ -116,6 +117,7 @@ export function useVoiceInput({
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wantsListeningRef = useRef(false);
   const recoveryAttemptsRef = useRef(0);
+  const networkErrorCountRef = useRef(0);
   const microphoneStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -215,11 +217,14 @@ export function useVoiceInput({
     debug("recognition-create", `constructor=${Recognition.name || "anonymous"}`);
     const recognition = new Recognition();
     recognition.lang = lang;
-    // Chromium desktop can terminate a continuous recognizer after a short
-    // silence. The hook restarts it while the user still wants to listen.
-    recognition.continuous = true;
+    // If continuous speech recognition encounters network errors on desktop Chromium,
+    // automatically fall back to single-utterance non-continuous mode which bypasses
+    // Google Speech API streaming socket drops.
+    const isNetworkFallback = networkErrorCountRef.current >= MAX_NETWORK_RETRIES;
+    recognition.continuous = !isNetworkFallback;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
+    debug("recognition-config", `continuous=${recognition.continuous}, networkRetries=${networkErrorCountRef.current}`);
     recognition.onresult = (event) => {
       debug("recognition-result", `results=${event.results.length}, index=${event.resultIndex}`);
       let interim = "";
@@ -244,6 +249,10 @@ export function useVoiceInput({
       const error = event.error ?? "";
       debug("recognition-error", `code=${error || "unknown"}, recovering=${wantsListeningRef.current}`);
       if (wantsListeningRef.current && TRANSIENT_ERRORS.has(error)) {
+        if (error === "network") {
+          networkErrorCountRef.current += 1;
+          debug("network-fallback-increment", `count=${networkErrorCountRef.current}`);
+        }
         // Only increment recovery attempts for actual errors, not for simple silences
         if (error !== "no-speech") {
           recoveryAttemptsRef.current += 1;
