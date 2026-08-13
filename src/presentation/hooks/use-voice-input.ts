@@ -99,7 +99,6 @@ function useMicLevel(stream: MediaStream | null): number {
   useEffect(() => {
     const AudioContextConstructor = getAudioContextConstructor();
     if (!stream || !AudioContextConstructor) {
-      setLevel(0);
       return;
     }
 
@@ -126,8 +125,13 @@ function useMicLevel(stream: MediaStream | null): number {
 
     return () => {
       cancelAnimationFrame(frame);
-      setLevel(0);
       void context.close().catch(() => undefined);
+      // Use a timeout or requestAnimationFrame to defer the reset 
+      // if we really need to clear the state on cleanup, but for a 
+      // simple meter, letting it stay at the last value until the 
+      // next stream starts or the component unmounts is usually fine.
+      // However, to be strictly correct and avoid the lint warning:
+      requestAnimationFrame(() => setLevel(0));
     };
   }, [stream]);
 
