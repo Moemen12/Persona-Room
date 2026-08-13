@@ -107,6 +107,7 @@ export function AudienceTranscript({
         setIsPerformerThinking(false);
         onListeningChange?.(false);
         onPerformance?.();
+        if (event.type === "message" && event.mood) onMoodChange?.(event.mood);
       }
       setSnapshot((current) => {
         const nextMessages =

@@ -124,6 +124,7 @@ async function persistConversation(
 
   await broadcastRoomEvent(sessionId, {
     type: "message",
+    mood: profile.mood,
     message: {
       id: crypto.randomUUID(),
       role: "assistant",

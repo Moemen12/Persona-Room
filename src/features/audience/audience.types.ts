@@ -1,5 +1,6 @@
 import { type CompanionId } from "@/features/persona/persona.types";
 import { type AudienceReaction, type VoteOption } from "@/lib/config/app";
+import type { PersonaMood } from "@/features/persona";
 import type * as audienceRepository from "./audience.repository";
 
 export type AudienceServiceDependencies = {
@@ -29,6 +30,7 @@ export interface RoomSnapshot {
 export type RoomBroadcast = {
   type: "message" | "vote-tally" | "persona-reaction";
   message?: RoomMessage;
+  mood?: PersonaMood;
   tally?: VoteTally;
   option?: VoteOption;
 } | {

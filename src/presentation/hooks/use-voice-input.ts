@@ -77,13 +77,11 @@ const BASE_RECOVERY_DELAY_MS = 180;
 const TRANSIENT_ERRORS = new Set(["aborted", "no-speech", "network"]);
 
 async function requestMicrophoneAccess() {
-  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return true;
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return null;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((track) => track.stop());
-    return true;
+    return await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -95,9 +93,15 @@ export function useVoiceInput({
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wantsListeningRef = useRef(false);
   const recoveryAttemptsRef = useRef(0);
+  const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const meterFrameRef = useRef<number | null>(null);
+  const meterLastUpdateRef = useRef(0);
   const scheduleRestartRef = useRef<(() => void) | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
+  const [inputLevel, setInputLevel] = useState(0);
   const [error, setError] = useState<string>();
   const isSupported = Boolean(getSpeechRecognitionConstructor());
 
@@ -108,6 +112,55 @@ export function useVoiceInput({
     }
   }, []);
 
+  const stopMicrophoneMeter = useCallback(() => {
+    if (meterFrameRef.current !== null) {
+      cancelAnimationFrame(meterFrameRef.current);
+      meterFrameRef.current = null;
+    }
+    microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
+    microphoneStreamRef.current = null;
+    analyserRef.current = null;
+    const audioContext = audioContextRef.current;
+    audioContextRef.current = null;
+    if (audioContext) void audioContext.close().catch(() => undefined);
+    setInputLevel(0);
+  }, []);
+
+  const startMicrophoneMeter = useCallback((stream: MediaStream) => {
+    if (typeof window === "undefined") return;
+    const audioWindow = window as Window & { webkitAudioContext?: typeof AudioContext };
+    const AudioContextConstructor = window.AudioContext ?? audioWindow.webkitAudioContext;
+    if (!AudioContextConstructor) return;
+
+    stopMicrophoneMeter();
+    microphoneStreamRef.current = stream;
+    const audioContext = new AudioContextConstructor();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.82;
+    audioContext.createMediaStreamSource(stream).connect(analyser);
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+    const samples = new Uint8Array(analyser.fftSize);
+
+    const updateMeter = (now: number) => {
+      if (!analyserRef.current) return;
+      if (now - meterLastUpdateRef.current >= 50) {
+        meterLastUpdateRef.current = now;
+        analyser.getByteTimeDomainData(samples);
+        let sum = 0;
+        for (const sample of samples) {
+          const normalized = (sample - 128) / 128;
+          sum += normalized * normalized;
+        }
+        setInputLevel(Math.min(1, Math.sqrt(sum / samples.length) * 3.2));
+      }
+      meterFrameRef.current = requestAnimationFrame(updateMeter);
+    };
+
+    meterFrameRef.current = requestAnimationFrame(updateMeter);
+  }, [stopMicrophoneMeter]);
+
   const stopListening = useCallback(() => {
     wantsListeningRef.current = false;
     recoveryAttemptsRef.current = 0;
@@ -115,9 +168,10 @@ export function useVoiceInput({
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
     recognition?.abort();
+    stopMicrophoneMeter();
     setIsListening(false);
     setInterimTranscript("");
-  }, [clearRestartTimer]);
+  }, [clearRestartTimer, stopMicrophoneMeter]);
 
   const createRecognition = useCallback(() => {
     const Recognition = getSpeechRecognitionConstructor();
@@ -156,6 +210,7 @@ export function useVoiceInput({
       }
 
       wantsListeningRef.current = false;
+      stopMicrophoneMeter();
       setError(friendlySpeechError(event.error));
       setIsListening(false);
       setInterimTranscript("");
@@ -166,6 +221,7 @@ export function useVoiceInput({
         scheduleRestartRef.current?.();
         return;
       }
+      stopMicrophoneMeter();
       setIsListening(false);
       setInterimTranscript("");
     };
@@ -182,12 +238,13 @@ export function useVoiceInput({
         setError("Voice input could not start. Please try again.");
       }
     }
-  }, [lang, onFinalTranscript]);
+  }, [lang, onFinalTranscript, stopMicrophoneMeter]);
 
   const scheduleRestart = useCallback(() => {
     if (!wantsListeningRef.current || recognitionRef.current || restartTimerRef.current) return;
     if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
       wantsListeningRef.current = false;
+      stopMicrophoneMeter();
       setIsListening(false);
       setInterimTranscript("");
       setError("Voice input paused. Check Chrome microphone permissions and try again.");
@@ -200,7 +257,7 @@ export function useVoiceInput({
       restartTimerRef.current = null;
       createRecognition();
     }, delay);
-  }, [createRecognition]);
+  }, [createRecognition, stopMicrophoneMeter]);
 
   useEffect(() => {
     scheduleRestartRef.current = scheduleRestart;
@@ -223,16 +280,20 @@ export function useVoiceInput({
     wantsListeningRef.current = true;
     setIsListening(true);
 
-    const hasMicrophone = await requestMicrophoneAccess();
-    if (!wantsListeningRef.current) return;
-    if (!hasMicrophone) {
+    const microphoneStream = await requestMicrophoneAccess();
+    if (!wantsListeningRef.current) {
+      microphoneStream?.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    if (!microphoneStream) {
       wantsListeningRef.current = false;
       setIsListening(false);
       setError("Microphone permission is blocked. Allow microphone access for localhost, then try again.");
       return;
     }
+    startMicrophoneMeter(microphoneStream);
     createRecognition();
-  }, [clearRestartTimer, createRecognition]);
+  }, [clearRestartTimer, createRecognition, startMicrophoneMeter]);
 
   useEffect(() => {
     return () => {
@@ -240,11 +301,13 @@ export function useVoiceInput({
       clearRestartTimer();
       recognitionRef.current?.abort();
       recognitionRef.current = null;
+      stopMicrophoneMeter();
     };
-  }, [clearRestartTimer]);
+  }, [clearRestartTimer, stopMicrophoneMeter]);
 
   return {
     error,
+    inputLevel,
     interimTranscript,
     isListening,
     isSupported,

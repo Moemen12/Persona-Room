@@ -94,15 +94,23 @@ export function useAutoSpeak({
       return;
     }
 
-    if (!enabled || isStreaming) return;
+    if (isStreaming) return;
 
-    if (
+    const isNewAssistantResponse =
       latestAssistant.id !== activeAssistantIdRef.current &&
-      latestAssistant.id !== baselineAssistantIdRef.current
-    ) {
+      latestAssistant.id !== baselineAssistantIdRef.current;
+    if (isNewAssistantResponse) {
       activeAssistantIdRef.current = latestAssistant.id;
       spokenAssistantIdRef.current = undefined;
       onAssistantResponseStarted?.(latestAssistant.id);
+    }
+
+    if (!enabled) {
+      if (isNewAssistantResponse) {
+        onAssistantPlaybackStarted?.(latestAssistant.id);
+        onNarrationCompleted?.(latestAssistant.id);
+      }
+      return;
     }
 
     if (

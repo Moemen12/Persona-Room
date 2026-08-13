@@ -101,6 +101,24 @@ export async function findSessionWithUserById(sessionId: string) {
   return { session: toPersonaSession(record), user: toPersonaUser(joinedUser) };
 }
 
+export async function findMemoriesByUserId(userId: string) {
+  const client = getSupabaseAdminClient();
+  const { data, error } = await client
+    .from("memories")
+    .select("id, content, importance, created_at")
+    .eq("user_id", userId)
+    .order("importance", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: Number(row.id),
+    content: String(row.content),
+    importance: Number(row.importance ?? 1),
+    createdAt: String(row.created_at),
+  }));
+}
+
 export async function findConversationsByUserIdAndCompanionId(
   userId: string,
   companionId: CompanionId,

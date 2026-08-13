@@ -37,6 +37,7 @@ export function ChatComposer({
   );
   const {
     error: voiceInputError,
+    inputLevel,
     interimTranscript,
     isListening,
     isSupported: isVoiceInputSupported,
@@ -70,6 +71,16 @@ export function ChatComposer({
             )}
           </div>
         </div>
+        {isListening ? (
+          <div className="composer__voice-meter" role="status" aria-live="polite" aria-label="Microphone is listening">
+            <span className="composer__voice-meter-label"><span className="presence-pulse" aria-hidden="true" /> Listening live</span>
+            <span className="composer__voice-bars" aria-hidden="true">
+              {Array.from({ length: 12 }, (_, index) => (
+                <i key={index} style={{ height: `${8 + inputLevel * (10 + (index % 4) * 5)}px` }} />
+              ))}
+            </span>
+          </div>
+        ) : null}
         {interimTranscript ? (
           <div className="composer__voice-preview" role="status" aria-live="polite">
             <span className="presence-pulse" aria-hidden="true" />

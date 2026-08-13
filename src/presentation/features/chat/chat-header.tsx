@@ -3,6 +3,7 @@
 import { Check, Copy, Mic2, Radio, Volume2, VolumeX } from "lucide-react";
 import { useState } from "react";
 
+import { type PersonaMood } from "@/features/persona";
 import { appRoutes } from "@/infrastructure/config/routes";
 import { useInterfaceSound } from "@/presentation/hooks/use-interface-sound";
 
@@ -11,6 +12,9 @@ interface ChatHeaderProps {
   isVoiceSupported: boolean;
   isVoicePreparing: boolean;
   voiceEnabled: boolean;
+  mood: PersonaMood;
+  viewerCount: number;
+  isStreaming: boolean;
   onToggleVoice: () => void;
 }
 
@@ -19,6 +23,9 @@ export function ChatHeader({
   isVoiceSupported,
   isVoicePreparing,
   voiceEnabled,
+  mood,
+  viewerCount,
+  isStreaming,
   onToggleVoice,
 }: ChatHeaderProps) {
   const { play, setSoundEnabled, soundEnabled } = useInterfaceSound();
@@ -42,7 +49,16 @@ export function ChatHeader({
         <Radio aria-hidden="true" size={16} />
         <span>Persona Room</span>
         <span className="persona-header__slash" aria-hidden="true">/</span>
-        <span className="persona-header__channel">private afterglow</span>
+        <span className="persona-header__channel">live room / private afterglow</span>
+        <span className={`persona-header__on-air ${isStreaming ? "persona-header__on-air--active" : ""}`}>
+          <span className="presence-pulse" aria-hidden="true" />
+          {isStreaming ? "Rina is live" : "ON AIR"}
+        </span>
+      </div>
+      <div className="persona-header__energy" role="status" aria-live="polite">
+        <span className="persona-header__energy-mood">{mood} energy</span>
+        <span className="persona-header__energy-divider" aria-hidden="true">·</span>
+        <span>{viewerCount} watching</span>
       </div>
       <div className="persona-header__actions">
         {isVoicePreparing ? (

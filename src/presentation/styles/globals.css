@@ -151,6 +151,17 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 .persona-header__identity svg { color: var(--violet-bright); filter: drop-shadow(0 0 10px rgba(203, 182, 255, 0.65)); }
 .persona-header__slash { color: rgba(221, 214, 254, 0.28); font-weight: 400; }
 .persona-header__channel { @apply overflow-hidden text-[var(--muted)] text-[0.74rem] font-semibold text-ellipsis whitespace-nowrap; }
+.persona-header__on-air {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[0.58rem] font-[850] tracking-[0.12em] uppercase;
+  color: #9efcff;
+  border: 1px solid rgba(0, 242, 254, 0.32);
+  background: rgba(0, 242, 254, 0.09);
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.12);
+}
+.persona-header__on-air--active { color: #ffe8a3; border-color: rgba(255, 204, 0, 0.42); background: rgba(255, 151, 0, 0.12); }
+.persona-header__energy { @apply inline-flex items-center gap-2 rounded-full px-3 py-2 text-[0.66rem] font-[760]; color: #cfc5ed; border: 1px solid rgba(190, 160, 255, 0.16); background: rgba(28, 20, 62, 0.55); }
+.persona-header__energy-mood { color: #ffb6f7; font-weight: 820; }
+.persona-header__energy-divider { color: rgba(221, 214, 254, 0.3); }
 .persona-header__actions, .audience-header__actions { @apply flex items-center gap-[9px]; }
 .persona-header__voice-status {
   @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-[760] tracking-[0.01em];
@@ -224,6 +235,18 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 .persona-profile h1, .audience-header h1, .vote-panel h2 { margin: 0; letter-spacing: -0.062em; }
 .persona-profile h1 { font-size: clamp(3.35rem, 5vw, 4.55rem); line-height: 0.88; }
 .persona-profile__line { @apply max-w-[210px] mx-auto mt-3.5 text-[var(--muted)] text-[0.87rem] leading-[1.5]; }
+.persona-profile__memory {
+  @apply grid gap-2 w-full mt-5 rounded-2xl p-3 text-left;
+  border: 1px solid rgba(190, 160, 255, 0.18);
+  background: linear-gradient(135deg, rgba(103, 55, 170, 0.18), rgba(23, 17, 54, 0.54));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
+}
+.persona-profile__memory-title { @apply flex items-center gap-1.5 text-[0.61rem] font-[820] tracking-[0.16em] text-[#cebfff]; }
+.persona-profile__memory-count { @apply ml-auto grid h-4 min-w-4 place-items-center rounded-full px-1 text-[0.58rem] tracking-normal; background: rgba(0, 242, 254, 0.18); color: #b8ffff; }
+.persona-profile__memory ul { @apply m-0 grid gap-1.5 pl-0 list-none; }
+.persona-profile__memory li { @apply truncate text-[0.71rem] leading-[1.35] text-[#ddd4ee]; }
+.persona-profile__memory li::before { content: "•"; color: #ff5cf3; margin-right: 6px; }
+.persona-profile__memory p { @apply m-0 text-[0.7rem] leading-[1.35] text-[#a89dbf]; }
 .persona-profile__signals { @apply grid w-full mt-auto; }
 .persona-profile__status, .persona-profile__mood {
   @apply inline-flex min-h-[47px] items-center justify-center gap-[7px] w-full text-[var(--muted)] text-[0.75rem];
@@ -264,6 +287,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 }
 .rina-avatar--listening { transform: rotate(-2deg) translateY(-1px); }
 .rina-avatar--listening .rina-avatar__glow { opacity: 0.82; }
+.rina-avatar--idle { animation: avatar-idle 5.8s ease-in-out infinite; }
 .rina-avatar--performing { animation: avatar-performance 720ms cubic-bezier(.23, 1, .32, 1); }
 .rina-avatar--performing .rina-avatar__glow { opacity: 1; filter: saturate(1.25); }
 .rina-avatar--speaking {
@@ -408,6 +432,24 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   @apply block w-full min-h-[50px] max-h-[142px] resize-none border-0 px-[13px] pr-[52px] pt-2 pb-[13px] text-white bg-transparent outline-none text-[0.93rem] leading-[1.48];
 }
 .composer textarea::placeholder { color: #b8afd0; opacity: 1; }
+.composer__voice-meter {
+  @apply flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-[0.72rem] font-[750];
+  color: #c9fff6;
+  border: 1px solid rgba(0, 242, 254, 0.36);
+  background: linear-gradient(90deg, rgba(0, 242, 254, 0.12), rgba(255, 92, 243, 0.1));
+  box-shadow: 0 0 20px rgba(0, 242, 254, 0.12);
+}
+.composer__voice-meter-label { @apply inline-flex items-center gap-2 whitespace-nowrap; }
+.composer__voice-bars { @apply flex items-center gap-1 h-6; }
+.composer__voice-bars i {
+  @apply block w-1 rounded-full;
+  min-height: 4px;
+  background: linear-gradient(180deg, #38ef7d, #00f2fe 48%, #ff5cf3);
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.55);
+  transition: height 90ms ease-out;
+}
+.composer__voice-bars i:nth-child(2n) { opacity: 0.82; }
+.composer__voice-bars i:nth-child(3n) { opacity: 0.68; }
 .composer__voice-preview {
   @apply flex items-center gap-1.5 px-[13px] pt-2 text-[0.72rem] italic;
   color: rgba(224, 205, 255, 0.72);
@@ -704,6 +746,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 @keyframes typing-dot { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
 @keyframes count-pop { from { opacity: 0.35; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes audience-entrance { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes avatar-idle { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-4px) rotate(0.5deg); } }
 @keyframes avatar-performance { 0% { transform: scale(1) rotate(0); } 32% { transform: scale(1.05) rotate(-2deg); } 64% { transform: scale(1.02) rotate(2deg); } 100% { transform: scale(1) rotate(0); } }
 @keyframes voice-status-pulse { 0%, 100% { opacity: 0.72; } 50% { opacity: 1; } }
 @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(200, 170, 255, 0.48); } 68%, 100% { box-shadow: 0 0 0 8px rgba(200, 170, 255, 0); } }
@@ -718,6 +761,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   .persona-profile__copy { margin-top: 0; }
   .persona-profile h1 { font-size: 3.4rem; }
   .persona-profile__line { max-width: none; margin: 9px 0 0; }
+  .persona-profile__memory { grid-column: 1 / -1; margin-top: 18px; }
   .persona-profile__signals { grid-column: 1 / -1; margin-top: 18px; }
   .persona-profile__status, .persona-profile__mood { justify-content: flex-start; }
   .persona-profile__change { grid-column: 1 / -1; margin-top: 12px; }
@@ -739,7 +783,8 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 @media (max-width: 560px) {
   .persona-shell, .audience-shell { padding: 14px 12px 28px; }
   .persona-header { min-height: 48px; margin-bottom: 14px; }
-  .persona-header__channel, .share-button span, .persona-header__voice-status { display: none; }
+  .persona-header__channel, .share-button span, .persona-header__voice-status, .persona-header__energy { display: none; }
+  .persona-header__on-air { font-size: 0.52rem; padding: 5px 7px; }
   .share-button { width: 39px; padding: 0; }
   .persona-header__actions { gap: 7px; }
   .icon-button, .share-button { border-radius: 12px; }
@@ -789,11 +834,15 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   .vote-option__track { display: none; }
   .vote-panel__foot { display: none; }
   .audience-transcript__body { min-height: 400px; height: 51vh; padding: 14px; }
+
+  .composer__voice-meter { box-shadow: none; }
+  .composer__voice-bars i { transition: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .assistant-typing, .assistant-typing__spark, .assistant-typing__dots i, .composer__thinking, .rina-avatar--performing, .audience-room--entrance .audience-header, .audience-room--entrance .audience-spotlight, .audience-room--entrance .vote-panel, .audience-room--entrance .audience-transcript { animation: none; }
 
+  .rina-avatar--idle { animation: none; }
   .rina-avatar--listening { transform: none; }
   .audience-viewers__label { animation: none; }
 

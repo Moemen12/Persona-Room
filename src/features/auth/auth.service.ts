@@ -17,6 +17,7 @@ const defaultDependencies: AuthServiceDependencies = {
   updateSessionCompanion: authRepository.updateSessionCompanion,
   findSessionWithUserById: authRepository.findSessionWithUserById,
   findConversationsByUserIdAndCompanionId: authRepository.findConversationsByUserIdAndCompanionId,
+  findMemoriesByUserId: authRepository.findMemoriesByUserId,
 };
 
 export async function ensurePersonaUserAndSession(
@@ -40,17 +41,21 @@ export async function getSessionBootstrap(
   dependencies: AuthServiceDependencies = defaultDependencies,
 ): Promise<SessionBootstrap> {
   const { user, session } = await ensurePersonaUserAndSession(supabaseAuthId, dependencies);
-  const messages = await dependencies.findConversationsByUserIdAndCompanionId(
-    user.id,
-    session.companionId,
-    APP_CONFIG.conversationHistoryLimit,
-  );
+  const [messages, memories] = await Promise.all([
+    dependencies.findConversationsByUserIdAndCompanionId(
+      user.id,
+      session.companionId,
+      APP_CONFIG.conversationHistoryLimit,
+    ),
+    dependencies.findMemoriesByUserId(user.id),
+  ]);
 
   return {
     user,
     session,
     mood: "neutral",
     messages,
+    memories,
   };
 }
 

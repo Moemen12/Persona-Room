@@ -1,6 +1,6 @@
-import { Heart, Sparkles } from "lucide-react";
+import { Bookmark, Heart, Sparkles } from "lucide-react";
 
-import { COMPANIONS, type CompanionId, type PersonaMood } from "@/features/persona";
+import { COMPANIONS, type CompanionId, type PersonaMemory, type PersonaMood } from "@/features/persona";
 import { cn } from "@/lib/utils";
 import { RinaAvatar } from "@/presentation/components/rina-avatar";
 
@@ -10,6 +10,8 @@ interface PersonaSidebarProps {
   isLive: boolean;
   viewerCount: number;
   isSpeaking: boolean;
+  memories: PersonaMemory[];
+  recentSignal?: string;
   onOpenSelector: () => void;
 }
 
@@ -24,6 +26,8 @@ export function PersonaSidebar({
   isLive,
   viewerCount,
   isSpeaking,
+  memories,
+  recentSignal,
   onOpenSelector,
 }: PersonaSidebarProps) {
   const companion = COMPANIONS[companionId];
@@ -49,6 +53,23 @@ export function PersonaSidebar({
         </span>
         <h1>{companion.name}</h1>
         <p className="persona-profile__line">{companion.selectorCopy}</p>
+      </div>
+
+      <div className="persona-profile__memory" aria-label="What the companion remembers">
+        <div className="persona-profile__memory-title">
+          <Bookmark aria-hidden="true" size={12} />
+          <span>MEMORY FILE</span>
+          <span className="persona-profile__memory-count">{memories.length}</span>
+        </div>
+        {memories.length ? (
+          <ul>
+            {memories.slice(0, 2).map((memory) => <li key={memory.id ?? memory.content}>{memory.content}</li>)}
+          </ul>
+        ) : recentSignal ? (
+          <p><strong>Live signal:</strong> {recentSignal}</p>
+        ) : (
+          <p>Tell {companion.name} one small thing worth keeping.</p>
+        )}
       </div>
 
       <div className="persona-profile__signals">

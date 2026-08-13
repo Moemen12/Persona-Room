@@ -308,6 +308,9 @@ export function ChatExperience() {
       if (event.type === "vote-tally" || event.type === "persona-reaction") {
         dispatch({ type: "set-mood", mood: "surprised" });
       }
+      if (event.type === "message" && event.mood) {
+        dispatch({ type: "set-mood", mood: event.mood });
+      }
       const roomMessage = "message" in event ? event.message : undefined;
       if (roomMessage && roomMessage.role === "assistant") {
         setMessages((current) => {
@@ -396,6 +399,10 @@ export function ChatExperience() {
   const isLoading = !state.identity && !state.setupError;
   const isStreaming = status === "submitted" || status === "streaming";
   const visibleChatError = error ? formatChatError(error) : state.setupError;
+  const latestUserSignal = [...messages]
+    .reverse()
+    .find((message) => message.role === "user");
+  const recentSignal = latestUserSignal ? messageText(latestUserSignal).slice(0, 84) : undefined;
   const { proactiveHint } = useChatProactivity({
     messages,
     isStreaming,
@@ -461,6 +468,9 @@ export function ChatExperience() {
           isVoiceSupported={isVoiceSupported}
           isVoicePreparing={isVoicePreparing}
           voiceEnabled={voiceEnabled}
+          mood={state.mood}
+          viewerCount={state.viewerCount}
+          isStreaming={isStreaming}
           onToggleVoice={() => setVoiceEnabled(!voiceEnabled)}
         />
 
@@ -471,6 +481,8 @@ export function ChatExperience() {
             isLive={Boolean(state.identity)}
             viewerCount={state.viewerCount}
             isSpeaking={isSpeaking}
+            memories={state.identity?.bootstrap.memories ?? []}
+            recentSignal={recentSignal}
             onOpenSelector={() => dispatch({ type: "set-selector-open", open: true })}
           />
 

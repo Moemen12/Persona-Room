@@ -35,6 +35,7 @@ export function RinaAvatar({
       className={cn(
         "rina-avatar",
         `rina-avatar--${size}`,
+        !isSpeaking && !isListening && !isPerforming && "rina-avatar--idle",
         isSpeaking && "rina-avatar--speaking",
         isListening && "rina-avatar--listening",
         isPerforming && "rina-avatar--performing",

@@ -96,6 +96,11 @@ export function ChatTranscript({
               isLatestMessage &&
               isAssistant &&
               (isStreaming || (isVoiceGated && !narration.started));
+            const shouldAnimateFreshReply =
+              isLatestMessage &&
+              isAssistant &&
+              narration.assistantId === message.id &&
+              narration.started;
 
             return (
               <MessageBubble
@@ -103,7 +108,7 @@ export function ChatTranscript({
                 role={bubbleRole}
                 text={content}
                 assistantName={companion.name}
-                animateText={isVoiceGated && narration.started && !narration.completed}
+                animateText={shouldAnimateFreshReply}
                 isStreaming={bubbleIsStreaming}
               />
             );
