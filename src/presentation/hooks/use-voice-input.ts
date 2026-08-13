@@ -243,12 +243,12 @@ export function useVoiceInput({
 
   const stopListening = useCallback(() => {
     const recorder = recorderRef.current;
+    dispatch({ type: "STOP_RECORDING" });
     if (recorder && recorder.state !== "inactive") {
       debug("capture-stop-requested");
       recorder.stop();
     } else {
       releaseStream();
-      dispatch({ type: "STOP_RECORDING" });
     }
   }, [debug, releaseStream]);
 
