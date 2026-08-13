@@ -36,6 +36,12 @@ export async function deleteMemoriesByIds(ids: number[]): Promise<void> {
   if (error) throw error;
 }
 
+export async function deleteMemoriesByContent(userId: string, content: string): Promise<void> {
+  const client = getSupabaseAdminClient();
+  const { error } = await client.from("memories").delete().eq("user_id", userId).eq("content", content);
+  if (error) throw error;
+}
+
 export async function findOldMemoriesForCleanup(userId: string, limit: number) {
   const client = getSupabaseAdminClient();
   const { data } = await client

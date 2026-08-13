@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 import { GoogleGenAI } from "@google/genai";
-import { Communicate, EdgeTTS } from "edge-tts-universal";
+import { EdgeTTS } from "edge-tts-universal";
 
 import { type CompanionId } from "@/features/persona";
 import { getRedisClient } from "@/infrastructure/redis/client";
@@ -158,16 +158,20 @@ export async function* streamCompanionVoice(
   let completed = false;
 
   try {
-    const communicate = new Communicate(text, {
+    // Use the more stable synthesize path to avoid WebSocket "mask" errors in production
+    const synthesis = await new EdgeTTS(
+      text,
       voice,
-      ...prosodyForCompanion(input.companionId),
-    });
-
-    for await (const chunk of communicate.stream()) {
-      if (chunk.type !== "audio" || !chunk.data?.length) continue;
-      const audioChunk = Buffer.from(chunk.data);
-      chunks.push(audioChunk);
-      yield audioChunk;
+      prosodyForCompanion(input.companionId)
+    ).synthesize();
+    
+    const audioBuffer = Buffer.from(await synthesis.audio.arrayBuffer());
+    chunks.push(audioBuffer);
+    
+    // Yield in small chunks to simulate streaming for the frontend MediaSource
+    const chunkSize = 16 * 1024; // 16KB
+    for (let i = 0; i < audioBuffer.length; i += chunkSize) {
+      yield audioBuffer.subarray(i, i + chunkSize);
     }
     completed = true;
   } finally {

@@ -31,6 +31,7 @@ const defaultDependencies: ChatServiceDependencies = {
   findMemoriesByUserId: chatRepository.findMemoriesByUserId,
   saveMemories: chatRepository.saveMemories,
   deleteMemoriesByIds: chatRepository.deleteMemoriesByIds,
+  deleteMemoriesByContent: chatRepository.deleteMemoriesByContent,
   findOldMemoriesForCleanup: chatRepository.findOldMemoriesForCleanup,
   saveConversations: chatRepository.saveConversations,
   findConversationHistory: chatRepository.findConversationHistory,
@@ -101,22 +102,34 @@ async function persistConversation(
   await dependencies.saveConversations(userId, companionId, userText, assistantText);
 
   try {
-    const memories = memoriesFromLines(
-      await extractUserMemories(userText, assistantText),
-    );
-    if (memories.length) {
-      await dependencies.saveMemories(userId, memories);
-
-      profile.memories = [...memories, ...profile.memories].slice(
-        0,
-        APP_CONFIG.memoryLimit,
+    const existingMemoryContents = profile.memories.map((m) => m.content);
+    const rawMemories = await extractUserMemories(userText, assistantText, existingMemoryContents);
+    
+    const newMemories = memoriesFromLines(rawMemories);
+    
+    if (newMemories.length) {
+      // Semantic Deduplication & Conflict Resolution
+      // If a new memory is about the same subject as an old one (e.g., name), 
+      // we should ideally replace it. For now, we'll deduplicate exact matches
+      // and let the LLM handle corrections by providing context.
+      const uniqueNewMemories = newMemories.filter(
+        (newM) => !profile.memories.some((oldM) => oldM.content.toLowerCase() === newM.content.toLowerCase())
       );
 
-      const overflow = await dependencies.findOldMemoriesForCleanup(userId, APP_CONFIG.memoryLimit);
-      if (overflow.length) {
-        await dependencies.deleteMemoriesByIds(overflow.map((row) => Number(row.id)));
+      if (uniqueNewMemories.length) {
+        await dependencies.saveMemories(userId, uniqueNewMemories);
+        
+        // Prepend new memories and enforce limit
+        profile.memories = [...uniqueNewMemories, ...profile.memories].slice(0, APP_CONFIG.memoryLimit);
+
+        // Cleanup overflow from DB
+        const overflow = await dependencies.findOldMemoriesForCleanup(userId, APP_CONFIG.memoryLimit);
+        if (overflow.length) {
+          await dependencies.deleteMemoriesByIds(overflow.map((row) => Number(row.id)));
+        }
+        
+        await dependencies.setProfileCache(userId, profile);
       }
-      await dependencies.setProfileCache(userId, profile);
     }
   } catch (error) {
     console.warn("Gemini memory extraction failed after conversation persistence", error);

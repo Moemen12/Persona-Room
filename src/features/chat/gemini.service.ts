@@ -36,9 +36,30 @@ export async function classifyEmotion(message: string): Promise<EmotionAnalysis>
   return emotionSchema.parse(value);
 }
 
-export async function extractUserMemories(userText: string, assistantText: string) {
+export async function extractUserMemories(
+  userText: string,
+  assistantText: string,
+  existingMemories: string[] = [],
+) {
+  const existingContext = existingMemories.length
+    ? `Existing memories about the user:\n${existingMemories.map((m) => `- ${m}`).join("\n")}`
+    : "No existing memories.";
+
   const value = await generateJson(
-    `Extract at most two durable, useful facts about the user from this conversation. Use concise neutral facts. Do not infer sensitive attributes. Return JSON only with this shape: {"memories":["fact one"]}. User: ${userText}\nRina: ${assistantText}`,
+    `You are a memory extraction engine for a virtual companion.
+${existingContext}
+
+Extract at most two durable, useful facts about the user from this new exchange.
+STRICT RULES:
+1. Return JSON only with this shape: {"memories":["fact one"]}.
+2. Use concise, neutral, third-person facts (e.g., "The user likes jazz").
+3. If the user corrects a previous fact (e.g., they said their name is Ali after being called Moemen), include the new corrected fact.
+4. DO NOT repeat facts already present in the "Existing memories" list.
+5. If no new useful facts are found, return an empty array: {"memories":[]}.
+
+New Exchange:
+User: ${userText}
+Assistant: ${assistantText}`,
   );
   return memorySchema.parse(value).memories;
 }

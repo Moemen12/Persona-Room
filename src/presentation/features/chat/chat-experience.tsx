@@ -563,9 +563,9 @@ export function ChatExperience() {
           <section className="chat-card">
             <div className="chat-card__topline">
               <div className="conversation-title">
-                <span>memory onPrivate conversation</span>
+                <span>Private conversation</span>
               </div>
-              <span className="chat-card__hint">say it like you mean it</span>
+              <span className="chat-card__hint">Say it like you mean it</span>
             </div>
 
             <ChatTranscript

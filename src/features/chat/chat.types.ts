@@ -4,6 +4,7 @@ export type ChatServiceDependencies = {
   findMemoriesByUserId: typeof chatRepository.findMemoriesByUserId;
   saveMemories: typeof chatRepository.saveMemories;
   deleteMemoriesByIds: typeof chatRepository.deleteMemoriesByIds;
+  deleteMemoriesByContent: typeof chatRepository.deleteMemoriesByContent;
   findOldMemoriesForCleanup: typeof chatRepository.findOldMemoriesForCleanup;
   saveConversations: typeof chatRepository.saveConversations;
   findConversationHistory: typeof chatRepository.findConversationHistory;

@@ -29,7 +29,7 @@ export async function updateCompanionAction(
     const authUser = await getSupabaseAuthUser(accessToken);
     await updateSessionCompanion(sessionId, authUser.id, companionId);
 
-    const bootstrap = await getSessionBootstrap(sessionId);
+    const bootstrap = await getSessionBootstrap(authUser.id);
 
     revalidatePath("/");
     revalidatePath(`/room/${sessionId}`);
