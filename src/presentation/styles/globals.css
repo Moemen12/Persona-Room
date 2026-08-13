@@ -404,7 +404,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   background: rgba(136, 19, 55, 0.16);
 }
 .error-message--actionable { @apply flex items-center justify-between gap-3; }
-.error-message button { @apply border-0 bg-transparent text-white text-[0.75rem] font-[800] underline; }
+.error-message button { background: transparent; border: none; color: white; font-size: 0.75rem; font-weight: 800; text-decoration: underline; }
 
 .composer {
   @apply grid items-end gap-2.5 p-[14px_15px_15px];
@@ -429,7 +429,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   @apply text-[var(--violet-bright)] text-[0.62rem] font-[830] tracking-[0.08em] uppercase;
 }
 .composer textarea {
-  @apply block w-full min-h-[50px] max-h-[142px] resize-none border-0 px-[13px] pr-[52px] pt-2 pb-[13px] text-white bg-transparent outline-none text-[0.93rem] leading-[1.48];
+  @apply block w-full min-h-[50px] max-h-[142px] resize-none px-[13px] pr-[52px] pt-2 pb-[13px] text-white bg-transparent outline-none text-[0.93rem] leading-[1.48]; border: none;
 }
 .composer textarea::placeholder { color: #b8afd0; opacity: 1; }
 .composer__voice-meter {
@@ -618,7 +618,8 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   animation: floating-up 2.8s ease-out forwards;
 }
 .floating-reaction__emoji {
-  @apply text-[2.4rem] filter drop-shadow(0 0 15px rgba(130, 60, 255, 0.6));
+  font-size: 2.4rem;
+  filter: drop-shadow(0 0 15px rgba(130, 60, 255, 0.6));
 }
 @keyframes floating-up {
   0% { 
@@ -758,7 +759,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
 
 @media (max-width: 850px) {
   .chat-layout { grid-template-columns: 1fr; }
-  .persona-profile { @apply grid [min-height:unset] grid-cols-[auto_1fr] items-center gap-[0_22px] py-[23px] px-[25px] text-left; }
+  .persona-profile { @apply grid [min-height:unset] grid-cols-[auto_1fr] items-center gap-x-[22px] gap-y-0 py-[23px] px-[25px] text-left; }
   .persona-profile__halo { top: 20px; left: 27px; width: 158px; height: 158px; }
   .persona-profile__live { top: 16px; right: 16px; left: auto; }
   .persona-profile .rina-avatar { grid-row: span 2; margin-top: 0; }
