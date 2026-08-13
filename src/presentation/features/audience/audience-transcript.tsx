@@ -197,7 +197,7 @@ export function AudienceTranscript({
             <button
               key={candidate.value}
               type="button"
-              className="audience-reaction-button"
+              className={`audience-reaction-button audience-reaction-button--${candidate.value}`}
               onClick={() => handleReaction(candidate.value)}
               aria-label={candidate.label}
             >

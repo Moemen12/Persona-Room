@@ -48,6 +48,13 @@ export function ChatTranscript({
   const companion = COMPANIONS[companionId];
   const latestMessage = messages.at(-1);
   const latestMessageText = latestMessage ? messageText(latestMessage) : "";
+  const isVoiceGateActive =
+    voiceSyncEnabled &&
+    latestMessage?.role === "assistant" &&
+    latestMessage.id === narration.assistantId &&
+    narration.waiting &&
+    !narration.started &&
+    !narration.completed;
   const messageListRef = useTranscriptAutoScroll({
     messageCount: messages.length,
     lastMessageId: latestMessage?.id,
@@ -90,12 +97,10 @@ export function ChatTranscript({
               narration.assistantId === message.id;
 
             const isWaitingForVoice =
-              voiceSyncEnabled &&
+              isVoiceGateActive &&
               isAssistant &&
               isLatestMessage &&
-              narration.waiting &&
-              !narration.started &&
-              !narration.completed;
+              narration.assistantId === message.id;
 
             // Never expose partial or complete assistant text while neural voice is preparing.
             // The typing state below is the only visible feedback until playback starts.
@@ -119,7 +124,7 @@ export function ChatTranscript({
               />
             );
           })}
-          {(isStreaming || (voiceSyncEnabled && narration.waiting && !narration.started && !narration.completed)) && (latestMessage?.role === "user" || voiceSyncEnabled) ? (
+          {(isStreaming || isVoiceGateActive) && (latestMessage?.role === "user" || isVoiceGateActive) ? (
             <div className="assistant-typing" role="status" aria-live="polite">
               <span className="assistant-typing__spark" aria-hidden="true">
                 <Sparkles size={14} />
