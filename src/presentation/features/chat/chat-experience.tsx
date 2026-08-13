@@ -240,7 +240,10 @@ const initialSessionState: SessionState = { status: "idle" };
 
 export function ChatExperience() {
   const [state, dispatch] = useReducer(chatClientReducer, initialChatState);
-  const [sessionState, runUpdateCompanion] = useActionState(updateCompanionAction, initialSessionState);
+  const [sessionState, runUpdateCompanion, isUpdatingCompanion] = useActionState(
+    updateCompanionAction,
+    initialSessionState,
+  );
   const lastProcessedSessionStateRef = useRef<SessionState>(initialSessionState);
   const { reactions, triggerReaction } = useAudienceReaction();
   const { play } = useInterfaceSound();
@@ -463,7 +466,7 @@ export function ChatExperience() {
       dispatch({ type: "set-selector-open", open: false });
       return;
     }
-    if (sessionState.status === "pending") return;
+    if (isUpdatingCompanion || sessionState.status === "pending") return;
 
     stop();
     stopSpeaking();
@@ -551,7 +554,7 @@ export function ChatExperience() {
       {state.isSelectorOpen && state.identity ? (
           <CompanionPicker
             currentSelection={currentSelection}
-            isChanging={sessionState.status === "pending"}
+            isChanging={isUpdatingCompanion || sessionState.status === "pending"}
             onSelect={selection => void chooseCompanion(selection)}
             onClose={() => dispatch({ type: "set-selector-open", open: false })}
           />
