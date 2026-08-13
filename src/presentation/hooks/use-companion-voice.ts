@@ -201,9 +201,12 @@ export function useCompanionVoice({
 
       const response = await fetch(appRoutes.api.voice, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
         cache: "no-store",
-        body: JSON.stringify({ accessToken, sessionId, companionId, language, text: text.trim() }),
+        body: JSON.stringify({ sessionId, companionId, language, text: text.trim() }),
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(await errorMessageFromResponse(response));
@@ -341,10 +344,12 @@ export function useCompanionVoice({
           if (!sessionId || !accessToken) throw new Error("Voice session is unavailable.");
           const response = await fetch(appRoutes.api.voiceStream, {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${accessToken}`,
+            },
             cache: "no-store",
             body: JSON.stringify({
-              accessToken,
               sessionId,
               companionId,
               language,

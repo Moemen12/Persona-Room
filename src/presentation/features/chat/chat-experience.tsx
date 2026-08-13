@@ -207,7 +207,13 @@ const initialChatState: ChatClientState = {
 function chatRequestBody() {
   const auth = getSafeChatAuth(CHAT_AUTH_STORAGE_KEY);
   if (!auth) return {};
-  return { sessionId: auth.sessionId, accessToken: auth.accessToken };
+  return { sessionId: auth.sessionId };
+}
+
+function chatRequestHeaders(): Record<string, string> {
+  const auth = getSafeChatAuth(CHAT_AUTH_STORAGE_KEY);
+  if (!auth) return {};
+  return { authorization: `Bearer ${auth.accessToken}` };
 }
 
 function asUiMessage(message: SessionBootstrap["messages"][number]): UIMessage {
@@ -268,6 +274,7 @@ export function ChatExperience() {
         transport: new DefaultChatTransport({
           api: appRoutes.api.chat,
           body: chatRequestBody,
+          headers: chatRequestHeaders,
         }),
       })
   );

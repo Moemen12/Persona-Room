@@ -1,16 +1,23 @@
 import { getInternalUserForSession } from "@/features/auth/auth.service";
 import { streamCompanionVoice, voiceRequestSchema } from "@/features/voice";
 import { getSupabaseAuthUser } from "@/infrastructure/supabase/server";
-import { MethodNotAllowedError, NotFoundError } from "@/lib/errors";
+import { AuthenticationError, MethodNotAllowedError, NotFoundError } from "@/lib/errors";
 import { createErrorResponse } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function getAccessToken(request: Request) {
+  return request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+}
+
 export async function POST(request: Request) {
   try {
+    const accessToken = getAccessToken(request);
+    if (!accessToken) throw new AuthenticationError();
+
     const input = voiceRequestSchema.parse(await request.json());
-    const authUser = await getSupabaseAuthUser(input.accessToken);
+    const authUser = await getSupabaseAuthUser(accessToken);
     const { session, user } = await getInternalUserForSession(input.sessionId);
 
     if (

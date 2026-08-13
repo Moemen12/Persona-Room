@@ -5,23 +5,29 @@ import {
   voiceTranscriptionMetadataSchema,
 } from "@/features/voice";
 import { getSupabaseAuthUser } from "@/infrastructure/supabase/server";
-import { MethodNotAllowedError, NotFoundError } from "@/lib/errors";
+import { AuthenticationError, MethodNotAllowedError, NotFoundError } from "@/lib/errors";
 import { createErrorResponse, createSuccessResponse } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function getAccessToken(request: Request) {
+  return request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+}
+
 export async function POST(request: Request) {
   try {
+    const accessToken = getAccessToken(request);
+    if (!accessToken) throw new AuthenticationError();
+
     const formData = await request.formData();
     const metadata = voiceTranscriptionMetadataSchema.parse({
-      accessToken: formData.get("accessToken"),
       sessionId: formData.get("sessionId"),
       companionId: formData.get("companionId"),
       language: formData.get("language"),
     });
     const { audio } = voiceAudioSchema.parse({ audio: formData.get("audio") });
-    const authUser = await getSupabaseAuthUser(metadata.accessToken);
+    const authUser = await getSupabaseAuthUser(accessToken);
     const { session, user } = await getInternalUserForSession(
       metadata.sessionId
     );
