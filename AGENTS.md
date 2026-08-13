@@ -83,7 +83,7 @@ The UI must keep route-specific loading, error, and not-found states product-cen
 9. **Shared Room Cues**: Replace disconnected "voting" with "Room Cues" that allow audience members to steer the conversation naturally. These cues are folded into the AI's next response as organic narrative directions.
 10. **Viewport-Fit Public Room**: On desktop, `/room/[id]` must fit within the viewport without page scrolling. Only the transcript or cue list may scroll internally when content exceeds available space.
 11. **Theme Simplicity**: Light mode should prefer CSS media queries and shared variables; when a manual toggle is requested, keep it as a small persisted preference with no theme-provider or hydration-heavy architecture.
-12. **Setup Dialog Balance**: The Room Setup dialog should use available desktop width through a balanced two-column layout rather than becoming a tall single-column card. Preserve a stacked, internally scrollable layout on small screens.
+12. **Setup Dialog Balance**: The Room Setup dialog should use available desktop width through a balanced two-column layout rather than becoming a tall single-column card. Preserve a stacked, internally scrollable layout on small screens. Personality groups use concise labels only; do not add repeated explanatory sentences when the individual archetype cards already communicate the distinction.
 
 ## Validation Before Finishing
 

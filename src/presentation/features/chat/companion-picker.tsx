@@ -136,7 +136,6 @@ export function CompanionPicker({
               <section className="personality-group" key={group.id}>
                 <div className="personality-group__heading">
                   <strong>{group.label}</strong>
-                  <span>{group.description}</span>
                 </div>
                 <div className="room-choice-grid room-choice-grid--personality">
                   {group.personalityIds.map(personalityId => {

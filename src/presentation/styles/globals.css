@@ -1386,3 +1386,32 @@ html[data-theme="light"] .audience-spotlight__copy > span:last-child { color: #2
 html[data-theme="light"] .audience-viewers { background: #ffffff; }
 html[data-theme="light"] .live-chip { border-color: #cbd6e2; background: #f1f3ff; color: #51479e; }
 html[data-theme="light"] .companion-picker__section-heading .eyebrow { color: #51479e; }
+
+/* Final light-mode readability fixes for the controls visible in the main chat. */
+html[data-theme="light"] .persona-profile__live,
+html[data-theme="light"] .live-chip {
+  border-color: #c5cfe0;
+  background: #eef0ff;
+  color: #51479e;
+  box-shadow: none;
+}
+html[data-theme="light"] .persona-profile__change {
+  border-color: #c0cadd;
+  background: #eef0ff;
+  color: #253142;
+  box-shadow: none;
+}
+html[data-theme="light"] .persona-profile__change:hover {
+  border-color: #9ba9be;
+  background: #e4e8ff;
+}
+html[data-theme="light"] .companion-choice__copy strong,
+html[data-theme="light"] .room-choice strong { color: #253142; }
+html[data-theme="light"] .companion-choice__copy > span { color: #51479e; }
+html[data-theme="light"] .composer__meta { color: #637184; }
+html[data-theme="light"] .composer__meta span + span::before { color: #98a6b7; }
+html[data-theme="light"] .composer textarea::placeholder { color: #718096; }
+html[data-theme="light"] .composer__field-top label { color: #51479e; }
+html[data-theme="light"] .composer__send { color: #ffffff; background: #584db5; box-shadow: 0 8px 18px rgba(88, 77, 181, 0.22); }
+html[data-theme="light"] .composer__send:disabled { color: #a2adbb; background: #dbe1e9; box-shadow: none; }
+html[data-theme="light"] .personality-group__heading strong { color: #253142; }
