@@ -34,11 +34,10 @@ interface UseVoiceInputOptions {
   onFinalTranscript: (transcript: string) => void;
 }
 
-const DEBUG_EVENT_LIMIT = 24;
-const MAX_RECOVERY_ATTEMPTS = 4;
-const MAX_NETWORK_RETRIES = 2;
-const BASE_RECOVERY_DELAY_MS = 180;
-const TRANSIENT_ERRORS = new Set(["aborted", "no-speech", "network"]);
+const DEBUG_EVENT_LIMIT = 28;
+const MAX_RECOVERY_ATTEMPTS = 3;
+const BASE_RECOVERY_DELAY_MS = 400;
+const TRANSIENT_ERRORS = new Set(["aborted", "no-speech", "network", "start-error"]);
 
 async function requestMicrophoneAccess() {
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -88,7 +87,7 @@ export function useVoiceInput({
 
   const wantsListeningRef = useRef(false);
   const recoveryAttemptsRef = useRef(0);
-  const networkErrorCountRef = useRef(0);
+  const hasEncounteredNetworkErrorRef = useRef(false);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const microphoneStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -99,6 +98,7 @@ export function useVoiceInput({
   const processedResultsRef = useRef(new Set<string>());
   const handledErrorRef = useRef<string | undefined>(undefined);
   const wasListeningRef = useRef(false);
+
   const [inputLevel, setInputLevel] = useState(0);
   const [isVoiceRequested, setIsVoiceRequested] = useState(false);
   const [localError, setLocalError] = useState<string>();
@@ -179,6 +179,7 @@ export function useVoiceInput({
 
     if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
       wantsListeningRef.current = false;
+      setIsVoiceRequested(false);
       abortListening();
       stopMicrophoneMeter();
       clearError();
@@ -188,17 +189,28 @@ export function useVoiceInput({
       return;
     }
 
-    const delay = recoveryAttemptsRef.current > 0
-      ? BASE_RECOVERY_DELAY_MS * recoveryAttemptsRef.current
-      : 50;
-    const continuous = networkErrorCountRef.current < MAX_NETWORK_RETRIES;
+    // Abort previous recognition instance before scheduling restart
+    abortListening();
+
+    const delay = BASE_RECOVERY_DELAY_MS * (recoveryAttemptsRef.current + 1);
+    const continuous = !hasEncounteredNetworkErrorRef.current;
     debug("recovery-scheduled", `delay=${delay}ms, attempts=${recoveryAttemptsRef.current}, continuous=${continuous}`);
+
     restartTimerRef.current = setTimeout(() => {
       restartTimerRef.current = null;
       if (!wantsListeningRef.current) return;
       clearError();
       debug("recovery-fired", `continuous=${continuous}`);
-      startRecognition({ continuous, interimResults: true, language: lang, maxAlternatives: 1 });
+      try {
+        startRecognition({
+          continuous,
+          interimResults: true,
+          language: lang,
+          maxAlternatives: 1,
+        });
+      } catch (cause) {
+        debug("recovery-start-throw", cause instanceof Error ? cause.message : String(cause));
+      }
     }, delay);
   }, [abortListening, clearError, debug, lang, startRecognition, stopMicrophoneMeter]);
 
@@ -216,7 +228,6 @@ export function useVoiceInput({
       if (processedResultsRef.current.has(key)) continue;
       processedResultsRef.current.add(key);
       recoveryAttemptsRef.current = 0;
-      networkErrorCountRef.current = 0;
       debugLater("final-transcript", result.transcript.trim());
       onFinalTranscript(result.transcript.trim());
     }
@@ -232,15 +243,18 @@ export function useVoiceInput({
 
     if (wantsListeningRef.current && code && TRANSIENT_ERRORS.has(code)) {
       if (code === "network") {
-        networkErrorCountRef.current += 1;
-        debugLater("network-fallback-increment", `count=${networkErrorCountRef.current}`);
+        hasEncounteredNetworkErrorRef.current = true;
+        debugLater("network-fallback-activated", "switching to continuous=false");
       }
-      if (code !== "no-speech") recoveryAttemptsRef.current += 1;
+      if (code !== "no-speech") {
+        recoveryAttemptsRef.current += 1;
+      }
       scheduleRestartRef.current?.();
       return;
     }
 
     wantsListeningRef.current = false;
+    setIsVoiceRequested(false);
     stopMicrophoneMeter();
   }, [debugLater, recognitionError, stopMicrophoneMeter]);
 
@@ -262,13 +276,13 @@ export function useVoiceInput({
       setLocalError("Voice input is not supported in this browser.");
       return;
     }
-    if (wantsListeningRef.current) return;
+    if (wantsListeningRef.current && isListening) return;
 
     clearRestartTimer();
     clearError();
     setLocalError(undefined);
     recoveryAttemptsRef.current = 0;
-    networkErrorCountRef.current = 0;
+    hasEncounteredNetworkErrorRef.current = false;
     wasListeningRef.current = false;
     processedResultsRef.current.clear();
     handledErrorRef.current = undefined;
@@ -297,15 +311,25 @@ export function useVoiceInput({
     debug("microphone-granted", track ? `label=${track.label || "hidden"}, state=${track.readyState}, enabled=${track.enabled}` : "no-audio-track");
     startMicrophoneMeter(microphoneAccess.stream);
     debug("recognition-config", "continuous=true, interim=true, engine=@mazka/react-speech-to-text");
-    startRecognition({ continuous: true, interimResults: true, language: lang, maxAlternatives: 1 });
-  }, [clearError, clearRestartTimer, debug, isSupported, lang, resetTranscript, startMicrophoneMeter, startRecognition]);
+    try {
+      startRecognition({
+        continuous: true,
+        interimResults: true,
+        language: lang,
+        maxAlternatives: 1,
+      });
+    } catch (cause) {
+      debug("start-throw", cause instanceof Error ? cause.message : String(cause));
+      setLocalError("Voice input could not start. Please try again.");
+    }
+  }, [clearError, clearRestartTimer, debug, isListening, isSupported, lang, resetTranscript, startMicrophoneMeter, startRecognition]);
 
   const stopListening = useCallback(() => {
     debug("stop-requested");
     wantsListeningRef.current = false;
     setIsVoiceRequested(false);
     recoveryAttemptsRef.current = 0;
-    networkErrorCountRef.current = 0;
+    hasEncounteredNetworkErrorRef.current = false;
     wasListeningRef.current = false;
     clearRestartTimer();
     abortListening();
