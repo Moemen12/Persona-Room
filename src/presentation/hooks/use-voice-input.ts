@@ -1,58 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSpeechToText } from "@mazka/react-speech-to-text";
 
-interface SpeechAlternativeLike {
-  transcript: string;
-}
-
-interface SpeechResultLike {
-  isFinal: boolean;
-  0: SpeechAlternativeLike;
-}
-
-interface SpeechResultListLike {
-  length: number;
-  [index: number]: SpeechResultLike;
-}
-
-interface SpeechRecognitionResultEventLike extends Event {
-  resultIndex: number;
-  results: SpeechResultListLike;
-}
-
-interface SpeechRecognitionErrorEventLike extends Event {
-  error?: string;
-}
-
-interface SpeechRecognitionLike {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  maxAlternatives: number;
-  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-type SpeechRecognitionWindow = Window & {
-  SpeechRecognition?: SpeechRecognitionConstructor;
-  webkitSpeechRecognition?: SpeechRecognitionConstructor;
-};
-
-function getSpeechRecognitionConstructor() {
-  if (typeof window === "undefined") return undefined;
-  const speechWindow = window as SpeechRecognitionWindow;
-  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+function normalizeSpeechErrorCode(code?: string) {
+  return code?.toLowerCase().replaceAll("_", "-");
 }
 
 function friendlySpeechError(code?: string) {
-  switch (code) {
+  switch (normalizeSpeechErrorCode(code)) {
     case "not-allowed":
     case "service-not-allowed":
       return "Microphone permission is needed for voice input. Allow it for this site, then try again.";
@@ -79,7 +35,6 @@ interface UseVoiceInputOptions {
 }
 
 const DEBUG_EVENT_LIMIT = 24;
-
 const MAX_RECOVERY_ATTEMPTS = 4;
 const MAX_NETWORK_RETRIES = 2;
 const BASE_RECOVERY_DELAY_MS = 180;
@@ -113,23 +68,41 @@ export function useVoiceInput({
   lang = "en-US",
   onFinalTranscript,
 }: UseVoiceInputOptions) {
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const {
+    error: recognitionError,
+    finalTranscript,
+    interimTranscript,
+    isSupported,
+    isListening,
+    results,
+    abortListening,
+    clearError,
+    resetTranscript,
+    startListening: startRecognition,
+  } = useSpeechToText({
+    continuous: true,
+    interimResults: true,
+    language: lang,
+    maxAlternatives: 1,
+  });
+
   const wantsListeningRef = useRef(false);
   const recoveryAttemptsRef = useRef(0);
   const networkErrorCountRef = useRef(0);
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const microphoneStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterFrameRef = useRef<number | null>(null);
   const meterLastUpdateRef = useRef(0);
   const scheduleRestartRef = useRef<(() => void) | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const [interimTranscript, setInterimTranscript] = useState("");
+  const processedResultsRef = useRef(new Set<string>());
+  const handledErrorRef = useRef<string | undefined>(undefined);
+  const wasListeningRef = useRef(false);
   const [inputLevel, setInputLevel] = useState(0);
-  const [error, setError] = useState<string>();
+  const [isVoiceRequested, setIsVoiceRequested] = useState(false);
+  const [localError, setLocalError] = useState<string>();
   const [debugEvents, setDebugEvents] = useState<VoiceDebugEvent[]>([]);
-  const isSupported = Boolean(getSpeechRecognitionConstructor());
 
   const debug = useCallback((event: string, detail?: string) => {
     const entry = { at: new Date().toISOString(), event, detail };
@@ -137,12 +110,9 @@ export function useVoiceInput({
     console.warn("[PersonaRoom voice]", entry);
   }, []);
 
-  const clearRestartTimer = useCallback(() => {
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
-  }, []);
+  const debugLater = useCallback((event: string, detail?: string) => {
+    queueMicrotask(() => debug(event, detail));
+  }, [debug]);
 
   const stopMicrophoneMeter = useCallback(() => {
     if (meterFrameRef.current !== null) {
@@ -197,131 +167,40 @@ export function useVoiceInput({
     meterFrameRef.current = requestAnimationFrame(updateMeter);
   }, [debug, stopMicrophoneMeter]);
 
-  const stopListening = useCallback(() => {
-    debug("stop-requested");
-    wantsListeningRef.current = false;
-    recoveryAttemptsRef.current = 0;
-    clearRestartTimer();
-    const recognition = recognitionRef.current;
-    recognitionRef.current = null;
-    recognition?.abort();
-    stopMicrophoneMeter();
-    setIsListening(false);
-    setInterimTranscript("");
-  }, [clearRestartTimer, debug, stopMicrophoneMeter]);
-
-  const createRecognition = useCallback(() => {
-    const Recognition = getSpeechRecognitionConstructor();
-    if (!Recognition || !wantsListeningRef.current || recognitionRef.current) return;
-
-    debug("recognition-create", `constructor=${Recognition.name || "anonymous"}`);
-    const recognition = new Recognition();
-    recognition.lang = lang;
-    // If continuous speech recognition encounters network errors on desktop Chromium,
-    // automatically fall back to single-utterance non-continuous mode which bypasses
-    // Google Speech API streaming socket drops.
-    const isNetworkFallback = networkErrorCountRef.current >= MAX_NETWORK_RETRIES;
-    recognition.continuous = !isNetworkFallback;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    debug("recognition-config", `continuous=${recognition.continuous}, networkRetries=${networkErrorCountRef.current}`);
-    recognition.onresult = (event) => {
-      debug("recognition-result", `results=${event.results.length}, index=${event.resultIndex}`);
-      let interim = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        const transcript = result[0]?.transcript ?? "";
-        if (result.isFinal) {
-          const finalTranscript = transcript.trim();
-          if (finalTranscript) {
-            debug("final-transcript", finalTranscript);
-            onFinalTranscript(finalTranscript);
-            recoveryAttemptsRef.current = 0;
-          }
-        } else {
-          interim += transcript;
-        }
-      }
-      setInterimTranscript(interim.trim());
-    };
-    recognition.onerror = (event) => {
-      recognitionRef.current = null;
-      const error = event.error ?? "";
-      debug("recognition-error", `code=${error || "unknown"}, recovering=${wantsListeningRef.current}`);
-      if (wantsListeningRef.current && TRANSIENT_ERRORS.has(error)) {
-        if (error === "network") {
-          networkErrorCountRef.current += 1;
-          debug("network-fallback-increment", `count=${networkErrorCountRef.current}`);
-        }
-        // Only increment recovery attempts for actual errors, not for simple silences
-        if (error !== "no-speech") {
-          recoveryAttemptsRef.current += 1;
-        }
-        setInterimTranscript("");
-        scheduleRestartRef.current?.();
-        return;
-      }
-
-      wantsListeningRef.current = false;
-      stopMicrophoneMeter();
-      setError(friendlySpeechError(event.error));
-      setIsListening(false);
-      setInterimTranscript("");
-    };
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      debug("recognition-end", `wanted=${wantsListeningRef.current}, attempts=${recoveryAttemptsRef.current}`);
-      if (wantsListeningRef.current) {
-        scheduleRestartRef.current?.();
-        return;
-      }
-      stopMicrophoneMeter();
-      setIsListening(false);
-      setInterimTranscript("");
-    };
-
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      debug("recognition-start-called", `lang=${lang}, continuous=true, interim=true`);
-    } catch (cause) {
-      recognitionRef.current = null;
-      debug("recognition-start-throw", cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause));
-      if (wantsListeningRef.current) {
-        scheduleRestartRef.current?.();
-      } else {
-        setIsListening(false);
-        setError("Voice input could not start. Please try again.");
-      }
+  const clearRestartTimer = useCallback(() => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
     }
-  }, [debug, lang, onFinalTranscript, stopMicrophoneMeter]);
+  }, []);
 
   const scheduleRestart = useCallback(() => {
-    if (!wantsListeningRef.current || recognitionRef.current || restartTimerRef.current) return;
-    
-    // Check limit only for non-silent recovery attempts
+    if (!wantsListeningRef.current || restartTimerRef.current) return;
+
     if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
       wantsListeningRef.current = false;
+      abortListening();
       stopMicrophoneMeter();
-      setIsListening(false);
-      setInterimTranscript("");
+      clearError();
       const message = "Voice input is having trouble connecting. Please check your microphone settings and try again.";
       debug("recovery-exhausted", message);
-      setError(message);
+      setLocalError(message);
       return;
     }
 
-    const delay = recoveryAttemptsRef.current > 0 
-      ? BASE_RECOVERY_DELAY_MS * recoveryAttemptsRef.current 
-      : 50; // Near-instant restart for simple silences
-
-    debug("recovery-scheduled", `delay=${delay}ms, attempts=${recoveryAttemptsRef.current}`);
+    const delay = recoveryAttemptsRef.current > 0
+      ? BASE_RECOVERY_DELAY_MS * recoveryAttemptsRef.current
+      : 50;
+    const continuous = networkErrorCountRef.current < MAX_NETWORK_RETRIES;
+    debug("recovery-scheduled", `delay=${delay}ms, attempts=${recoveryAttemptsRef.current}, continuous=${continuous}`);
     restartTimerRef.current = setTimeout(() => {
       restartTimerRef.current = null;
-      debug("recovery-fired");
-      createRecognition();
+      if (!wantsListeningRef.current) return;
+      clearError();
+      debug("recovery-fired", `continuous=${continuous}`);
+      startRecognition({ continuous, interimResults: true, language: lang, maxAlternatives: 1 });
     }, delay);
-  }, [createRecognition, debug, stopMicrophoneMeter]);
+  }, [abortListening, clearError, debug, lang, startRecognition, stopMicrophoneMeter]);
 
   useEffect(() => {
     scheduleRestartRef.current = scheduleRestart;
@@ -330,21 +209,72 @@ export function useVoiceInput({
     };
   }, [scheduleRestart]);
 
-  const startListening = useCallback(async () => {
-    const Recognition = getSpeechRecognitionConstructor();
-    debug("start-requested", `supported=${Boolean(Recognition)}, secureContext=${typeof window !== "undefined" ? window.isSecureContext : false}`);
-    if (!Recognition) {
-      debug("unsupported", "SpeechRecognition and webkitSpeechRecognition are unavailable");
-      setError("Voice input is not supported in this browser.");
+  useEffect(() => {
+    for (const result of results) {
+      if (!result.isFinal || !result.transcript.trim()) continue;
+      const key = `${result.timestamp.getTime()}:${result.transcript}`;
+      if (processedResultsRef.current.has(key)) continue;
+      processedResultsRef.current.add(key);
+      recoveryAttemptsRef.current = 0;
+      networkErrorCountRef.current = 0;
+      debugLater("final-transcript", result.transcript.trim());
+      onFinalTranscript(result.transcript.trim());
+    }
+  }, [debugLater, onFinalTranscript, results]);
+
+  useEffect(() => {
+    if (!recognitionError) return;
+    const errorKey = `${recognitionError.code}:${recognitionError.message}`;
+    if (handledErrorRef.current === errorKey) return;
+    handledErrorRef.current = errorKey;
+    const code = normalizeSpeechErrorCode(recognitionError.code);
+    debugLater("recognition-error", `code=${recognitionError.code}, normalized=${code}, message=${recognitionError.message || "none"}`);
+
+    if (wantsListeningRef.current && code && TRANSIENT_ERRORS.has(code)) {
+      if (code === "network") {
+        networkErrorCountRef.current += 1;
+        debugLater("network-fallback-increment", `count=${networkErrorCountRef.current}`);
+      }
+      if (code !== "no-speech") recoveryAttemptsRef.current += 1;
+      scheduleRestartRef.current?.();
       return;
     }
-    if (recognitionRef.current || wantsListeningRef.current) return;
+
+    wantsListeningRef.current = false;
+    stopMicrophoneMeter();
+  }, [debugLater, recognitionError, stopMicrophoneMeter]);
+
+  useEffect(() => {
+    if (isListening) {
+      wasListeningRef.current = true;
+      return;
+    }
+    if (!wantsListeningRef.current || !wasListeningRef.current || recognitionError) return;
+    wasListeningRef.current = false;
+    debugLater("recognition-end", "library reported listening=false without an error; recovering");
+    recoveryAttemptsRef.current += 1;
+    scheduleRestartRef.current?.();
+  }, [debugLater, isListening, recognitionError]);
+
+  const startListening = useCallback(async () => {
+    debug("start-requested", `supported=${isSupported}, secureContext=${typeof window !== "undefined" ? window.isSecureContext : false}`);
+    if (!isSupported) {
+      setLocalError("Voice input is not supported in this browser.");
+      return;
+    }
+    if (wantsListeningRef.current) return;
 
     clearRestartTimer();
-    setError(undefined);
+    clearError();
+    setLocalError(undefined);
     recoveryAttemptsRef.current = 0;
+    networkErrorCountRef.current = 0;
+    wasListeningRef.current = false;
+    processedResultsRef.current.clear();
+    handledErrorRef.current = undefined;
+    resetTranscript();
     wantsListeningRef.current = true;
-    setIsListening(true);
+    setIsVoiceRequested(true);
 
     const permissionState = await getMicrophonePermissionState();
     debug("permission-state", permissionState);
@@ -356,36 +286,52 @@ export function useVoiceInput({
     }
     if (!microphoneAccess.stream) {
       wantsListeningRef.current = false;
-      setIsListening(false);
+      setIsVoiceRequested(false);
       const detail = microphoneAccess.error ? `${permissionState}; ${microphoneAccess.error}` : permissionState;
       debug("microphone-failed", detail);
-      setError(`Microphone could not start (${detail}). Check site and system microphone permissions.`);
+      setLocalError(`Microphone could not start (${detail}). Check site and system microphone permissions.`);
       return;
     }
+
     const track = microphoneAccess.stream.getAudioTracks()[0];
     debug("microphone-granted", track ? `label=${track.label || "hidden"}, state=${track.readyState}, enabled=${track.enabled}` : "no-audio-track");
     startMicrophoneMeter(microphoneAccess.stream);
-    createRecognition();
-  }, [clearRestartTimer, createRecognition, debug, startMicrophoneMeter]);
+    debug("recognition-config", "continuous=true, interim=true, engine=@mazka/react-speech-to-text");
+    startRecognition({ continuous: true, interimResults: true, language: lang, maxAlternatives: 1 });
+  }, [clearError, clearRestartTimer, debug, isSupported, lang, resetTranscript, startMicrophoneMeter, startRecognition]);
+
+  const stopListening = useCallback(() => {
+    debug("stop-requested");
+    wantsListeningRef.current = false;
+    setIsVoiceRequested(false);
+    recoveryAttemptsRef.current = 0;
+    networkErrorCountRef.current = 0;
+    wasListeningRef.current = false;
+    clearRestartTimer();
+    abortListening();
+    clearError();
+    resetTranscript();
+    stopMicrophoneMeter();
+  }, [abortListening, clearError, clearRestartTimer, debug, resetTranscript, stopMicrophoneMeter]);
 
   useEffect(() => {
     return () => {
       wantsListeningRef.current = false;
       clearRestartTimer();
-      recognitionRef.current?.abort();
-      recognitionRef.current = null;
+      abortListening();
       stopMicrophoneMeter();
     };
-  }, [clearRestartTimer, stopMicrophoneMeter]);
+  }, [abortListening, clearRestartTimer, stopMicrophoneMeter]);
 
   return {
     debugEvents,
-    error,
+    error: localError ?? (recognitionError ? friendlySpeechError(recognitionError.code) : undefined),
     inputLevel,
     interimTranscript,
-    isListening,
+    isListening: isVoiceRequested && isListening,
     isSupported,
     startListening,
     stopListening,
+    finalTranscript,
   };
 }
