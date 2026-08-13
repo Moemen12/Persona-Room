@@ -455,9 +455,24 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--violet-b
   color: rgba(224, 205, 255, 0.72);
 }
 .composer__voice-error {
-  @apply px-[13px] pb-2 text-[0.68rem];
+  @apply grid gap-2 px-[13px] pb-2 text-[0.68rem];
   color: #fda4af;
 }
+.composer__voice-debug {
+  @apply rounded-lg p-2 text-[0.64rem] not-italic;
+  color: rgba(224, 215, 244, 0.76);
+  border: 1px solid rgba(253, 164, 175, 0.22);
+  background: rgba(21, 13, 42, 0.68);
+}
+.composer__voice-debug summary { @apply cursor-pointer font-[760] text-[#ffd3d8]; }
+.composer__voice-debug-actions { @apply flex flex-wrap items-center gap-2 py-2; }
+.composer__voice-debug-actions button { @apply rounded-md px-2 py-1 font-[760]; color: #b8ffff; border: 1px solid rgba(0, 242, 254, 0.26); background: rgba(0, 242, 254, 0.08); }
+.composer__voice-debug-actions span { color: rgba(224, 215, 244, 0.5); }
+.composer__voice-debug ol { @apply m-0 grid max-h-40 gap-1 overflow-auto pl-0 list-none; }
+.composer__voice-debug li { @apply grid grid-cols-[auto_auto_1fr] gap-2; }
+.composer__voice-debug time { color: rgba(224, 215, 244, 0.42); }
+.composer__voice-debug strong { color: #ffb6f7; }
+.composer__voice-debug li span { @apply truncate; color: rgba(224, 215, 244, 0.72); }
 .composer__mic {
   @apply absolute right-2 bottom-2 grid h-8 w-8 place-items-center rounded-xl text-[var(--lavender)] transition-all duration-150;
   border: 1px solid rgba(214, 199, 255, 0.18);

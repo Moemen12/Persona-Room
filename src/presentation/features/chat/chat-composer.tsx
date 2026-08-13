@@ -36,6 +36,7 @@ export function ChatComposer({
     [draft, onDraftChange],
   );
   const {
+    debugEvents,
     error: voiceInputError,
     inputLevel,
     interimTranscript,
@@ -112,7 +113,28 @@ export function ChatComposer({
         />
         {voiceInputError ? (
           <div id="voice-input-error" className="composer__voice-error" role="alert">
-            {voiceInputError}
+            <span>{voiceInputError}</span>
+            <details className="composer__voice-debug">
+              <summary>Voice diagnostics</summary>
+              <div className="composer__voice-debug-actions">
+                <button
+                  type="button"
+                  onClick={() => void navigator.clipboard?.writeText(JSON.stringify(debugEvents, null, 2))}
+                >
+                  Copy debug log
+                </button>
+                <span>{debugEvents.length} events captured</span>
+              </div>
+              <ol>
+                {debugEvents.map((event, index) => (
+                  <li key={`${event.at}-${event.event}-${index}`}>
+                    <time>{new Date(event.at).toLocaleTimeString()}</time>
+                    <strong>{event.event}</strong>
+                    {event.detail ? <span>{event.detail}</span> : null}
+                  </li>
+                ))}
+              </ol>
+            </details>
           </div>
         ) : null}
         {isVoiceInputSupported ? (

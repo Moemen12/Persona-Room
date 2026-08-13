@@ -67,21 +67,44 @@ function friendlySpeechError(code?: string) {
   }
 }
 
+export interface VoiceDebugEvent {
+  at: string;
+  event: string;
+  detail?: string;
+}
+
 interface UseVoiceInputOptions {
   lang?: string;
   onFinalTranscript: (transcript: string) => void;
 }
+
+const DEBUG_EVENT_LIMIT = 24;
 
 const MAX_RECOVERY_ATTEMPTS = 4;
 const BASE_RECOVERY_DELAY_MS = 180;
 const TRANSIENT_ERRORS = new Set(["aborted", "no-speech", "network"]);
 
 async function requestMicrophoneAccess() {
-  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return null;
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    return { stream: null, error: "getUserMedia unavailable" };
+  }
   try {
-    return await navigator.mediaDevices.getUserMedia({ audio: true });
+    return {
+      stream: await navigator.mediaDevices.getUserMedia({ audio: true }),
+    };
+  } catch (cause) {
+    const error = cause instanceof DOMException ? `${cause.name}: ${cause.message}` : String(cause);
+    return { stream: null, error };
+  }
+}
+
+async function getMicrophonePermissionState() {
+  if (typeof navigator === "undefined" || !navigator.permissions?.query) return "unavailable";
+  try {
+    const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+    return result.state;
   } catch {
-    return null;
+    return "unknown";
   }
 }
 
@@ -103,7 +126,14 @@ export function useVoiceInput({
   const [interimTranscript, setInterimTranscript] = useState("");
   const [inputLevel, setInputLevel] = useState(0);
   const [error, setError] = useState<string>();
+  const [debugEvents, setDebugEvents] = useState<VoiceDebugEvent[]>([]);
   const isSupported = Boolean(getSpeechRecognitionConstructor());
+
+  const debug = useCallback((event: string, detail?: string) => {
+    const entry = { at: new Date().toISOString(), event, detail };
+    setDebugEvents((previous) => [...previous, entry].slice(-DEBUG_EVENT_LIMIT));
+    console.warn("[PersonaRoom voice]", entry);
+  }, []);
 
   const clearRestartTimer = useCallback(() => {
     if (restartTimerRef.current) {
@@ -130,8 +160,12 @@ export function useVoiceInput({
     if (typeof window === "undefined") return;
     const audioWindow = window as Window & { webkitAudioContext?: typeof AudioContext };
     const AudioContextConstructor = window.AudioContext ?? audioWindow.webkitAudioContext;
-    if (!AudioContextConstructor) return;
+    if (!AudioContextConstructor) {
+      debug("meter-unavailable", "AudioContext is unavailable; continuing without waveform");
+      return;
+    }
 
+    debug("meter-start", `audioContext=${AudioContextConstructor.name || "unknown"}`);
     stopMicrophoneMeter();
     microphoneStreamRef.current = stream;
     const audioContext = new AudioContextConstructor();
@@ -159,9 +193,10 @@ export function useVoiceInput({
     };
 
     meterFrameRef.current = requestAnimationFrame(updateMeter);
-  }, [stopMicrophoneMeter]);
+  }, [debug, stopMicrophoneMeter]);
 
   const stopListening = useCallback(() => {
+    debug("stop-requested");
     wantsListeningRef.current = false;
     recoveryAttemptsRef.current = 0;
     clearRestartTimer();
@@ -171,12 +206,13 @@ export function useVoiceInput({
     stopMicrophoneMeter();
     setIsListening(false);
     setInterimTranscript("");
-  }, [clearRestartTimer, stopMicrophoneMeter]);
+  }, [clearRestartTimer, debug, stopMicrophoneMeter]);
 
   const createRecognition = useCallback(() => {
     const Recognition = getSpeechRecognitionConstructor();
     if (!Recognition || !wantsListeningRef.current || recognitionRef.current) return;
 
+    debug("recognition-create", `constructor=${Recognition.name || "anonymous"}`);
     const recognition = new Recognition();
     recognition.lang = lang;
     // Chromium desktop can terminate a continuous recognizer after a short
@@ -185,6 +221,7 @@ export function useVoiceInput({
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.onresult = (event) => {
+      debug("recognition-result", `results=${event.results.length}, index=${event.resultIndex}`);
       let interim = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
@@ -192,6 +229,7 @@ export function useVoiceInput({
         if (result.isFinal) {
           const finalTranscript = transcript.trim();
           if (finalTranscript) {
+            debug("final-transcript", finalTranscript);
             onFinalTranscript(finalTranscript);
             recoveryAttemptsRef.current = 0;
           }
@@ -204,6 +242,7 @@ export function useVoiceInput({
     recognition.onerror = (event) => {
       recognitionRef.current = null;
       const error = event.error ?? "";
+      debug("recognition-error", `code=${error || "unknown"}, recovering=${wantsListeningRef.current}`);
       if (wantsListeningRef.current && TRANSIENT_ERRORS.has(error)) {
         // Only increment recovery attempts for actual errors, not for simple silences
         if (error !== "no-speech") {
@@ -222,6 +261,7 @@ export function useVoiceInput({
     };
     recognition.onend = () => {
       recognitionRef.current = null;
+      debug("recognition-end", `wanted=${wantsListeningRef.current}, attempts=${recoveryAttemptsRef.current}`);
       if (wantsListeningRef.current) {
         scheduleRestartRef.current?.();
         return;
@@ -234,8 +274,10 @@ export function useVoiceInput({
     recognitionRef.current = recognition;
     try {
       recognition.start();
-    } catch {
+      debug("recognition-start-called", `lang=${lang}, continuous=true, interim=true`);
+    } catch (cause) {
       recognitionRef.current = null;
+      debug("recognition-start-throw", cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause));
       if (wantsListeningRef.current) {
         scheduleRestartRef.current?.();
       } else {
@@ -243,7 +285,7 @@ export function useVoiceInput({
         setError("Voice input could not start. Please try again.");
       }
     }
-  }, [lang, onFinalTranscript, stopMicrophoneMeter]);
+  }, [debug, lang, onFinalTranscript, stopMicrophoneMeter]);
 
   const scheduleRestart = useCallback(() => {
     if (!wantsListeningRef.current || recognitionRef.current || restartTimerRef.current) return;
@@ -254,7 +296,9 @@ export function useVoiceInput({
       stopMicrophoneMeter();
       setIsListening(false);
       setInterimTranscript("");
-      setError("Voice input is having trouble connecting. Please check your microphone settings and try again.");
+      const message = "Voice input is having trouble connecting. Please check your microphone settings and try again.";
+      debug("recovery-exhausted", message);
+      setError(message);
       return;
     }
 
@@ -262,11 +306,13 @@ export function useVoiceInput({
       ? BASE_RECOVERY_DELAY_MS * recoveryAttemptsRef.current 
       : 50; // Near-instant restart for simple silences
 
+    debug("recovery-scheduled", `delay=${delay}ms, attempts=${recoveryAttemptsRef.current}`);
     restartTimerRef.current = setTimeout(() => {
       restartTimerRef.current = null;
+      debug("recovery-fired");
       createRecognition();
     }, delay);
-  }, [createRecognition, stopMicrophoneMeter]);
+  }, [createRecognition, debug, stopMicrophoneMeter]);
 
   useEffect(() => {
     scheduleRestartRef.current = scheduleRestart;
@@ -277,7 +323,9 @@ export function useVoiceInput({
 
   const startListening = useCallback(async () => {
     const Recognition = getSpeechRecognitionConstructor();
+    debug("start-requested", `supported=${Boolean(Recognition)}, secureContext=${typeof window !== "undefined" ? window.isSecureContext : false}`);
     if (!Recognition) {
+      debug("unsupported", "SpeechRecognition and webkitSpeechRecognition are unavailable");
       setError("Voice input is not supported in this browser.");
       return;
     }
@@ -289,20 +337,27 @@ export function useVoiceInput({
     wantsListeningRef.current = true;
     setIsListening(true);
 
-    const microphoneStream = await requestMicrophoneAccess();
+    const permissionState = await getMicrophonePermissionState();
+    debug("permission-state", permissionState);
+    const microphoneAccess = await requestMicrophoneAccess();
     if (!wantsListeningRef.current) {
-      microphoneStream?.getTracks().forEach((track) => track.stop());
+      microphoneAccess.stream?.getTracks().forEach((track) => track.stop());
+      debug("start-cancelled", "user stopped while microphone permission was pending");
       return;
     }
-    if (!microphoneStream) {
+    if (!microphoneAccess.stream) {
       wantsListeningRef.current = false;
       setIsListening(false);
-      setError("Microphone permission is blocked. Allow microphone access for localhost, then try again.");
+      const detail = microphoneAccess.error ? `${permissionState}; ${microphoneAccess.error}` : permissionState;
+      debug("microphone-failed", detail);
+      setError(`Microphone could not start (${detail}). Check site and system microphone permissions.`);
       return;
     }
-    startMicrophoneMeter(microphoneStream);
+    const track = microphoneAccess.stream.getAudioTracks()[0];
+    debug("microphone-granted", track ? `label=${track.label || "hidden"}, state=${track.readyState}, enabled=${track.enabled}` : "no-audio-track");
+    startMicrophoneMeter(microphoneAccess.stream);
     createRecognition();
-  }, [clearRestartTimer, createRecognition, startMicrophoneMeter]);
+  }, [clearRestartTimer, createRecognition, debug, startMicrophoneMeter]);
 
   useEffect(() => {
     return () => {
@@ -315,6 +370,7 @@ export function useVoiceInput({
   }, [clearRestartTimer, stopMicrophoneMeter]);
 
   return {
+    debugEvents,
     error,
     inputLevel,
     interimTranscript,
