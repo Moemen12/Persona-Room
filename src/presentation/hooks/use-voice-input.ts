@@ -3,16 +3,10 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useSpeechToText } from "@mazka/react-speech-to-text";
 
-/**
- * Normalizes speech recognition error codes to a consistent kebab-case format.
- */
 function normalizeErrorCode(code?: string): string | undefined {
   return code?.toLowerCase().replaceAll("_", "-");
 }
 
-/**
- * Maps technical error codes to user-friendly messages.
- */
 function getFriendlyErrorMessage(code?: string): string {
   switch (normalizeErrorCode(code)) {
     case "not-allowed":
@@ -21,7 +15,7 @@ function getFriendlyErrorMessage(code?: string): string {
     case "audio-capture":
       return "No microphone detected. Check your system input settings.";
     case "network":
-      return "Voice service is unavailable. Check your internet connection.";
+      return "Voice service is unavailable. Check your internet connection or browser settings.";
     case "no-speech":
       return "I didn't catch that. Please try speaking again.";
     default:
@@ -35,91 +29,31 @@ export interface VoiceDebugEvent {
   detail?: string;
 }
 
-/**
- * Hook to manage audio visualization level (waveform) from a MediaStream.
- */
-function useAudioMeter(stream: MediaStream | null, debug: (e: string, d?: string) => void) {
-  const [level, setLevel] = useState(0);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const contextRef = useRef<AudioContext | null>(null);
-  const frameRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!stream) {
-      queueMicrotask(() => setLevel(0));
-      return;
-    }
-
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) {
-      debug("meter-unavailable", "AudioContext not supported");
-      return;
-    }
-
-    const context = new AudioContextClass();
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.8;
-
-    const source = context.createMediaStreamSource(stream);
-    source.connect(analyser);
-
-    contextRef.current = context;
-    analyserRef.current = analyser;
-    debug("meter-started");
-
-    const buffer = new Uint8Array(analyser.fftSize);
-    const update = () => {
-      if (!analyserRef.current) return;
-      analyserRef.current.getByteTimeDomainData(buffer);
-      let sum = 0;
-      for (const sample of buffer) {
-        const v = (sample - 128) / 128;
-        sum += v * v;
-      }
-      setLevel(Math.min(1, Math.sqrt(sum / buffer.length) * 3.5));
-      frameRef.current = requestAnimationFrame(update);
-    };
-
-    frameRef.current = requestAnimationFrame(update);
-
-    return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      void context.close();
-      debug("meter-stopped");
-    };
-  }, [stream, debug]);
-
-  return level;
-}
-
 interface UseVoiceInputOptions {
   lang?: string;
   onFinalTranscript: (transcript: string) => void;
 }
 
 /**
- * Declarative hook for voice input with robust diagnostics and automatic desktop recovery.
+ * Clean, declarative voice hook that relies strictly on the speech recognition library
+ * without manual getUserMedia contention that triggers desktop Chromium network errors.
  */
 export function useVoiceInput({ lang = "en-US", onFinalTranscript }: UseVoiceInputOptions) {
   const [debugEvents, setDebugEvents] = useState<VoiceDebugEvent[]>([]);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [microphoneStream, setMicrophoneStream] = useState<MediaStream | null>(null);
   const [localError, setLocalError] = useState<string>();
-  const [isContinuous, setIsContinuous] = useState(true);
+  const [inputLevel, setInputLevel] = useState(0);
 
-  const networkRetriesRef = useRef(0);
   const processedResultsRef = useRef(new Set<string>());
+  const mockMeterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const debug = useCallback((event: string, detail?: string) => {
-    // Defer state updates to avoid React cascading render warnings
     queueMicrotask(() => {
       setDebugEvents((prev) => [...prev, { at: new Date().toISOString(), event, detail }].slice(-24));
     });
     console.warn(`[Voice] ${event}`, detail || "");
   }, []);
 
-  // Library-backed speech recognition
   const {
     error: recognitionError,
     interimTranscript,
@@ -131,88 +65,82 @@ export function useVoiceInput({ lang = "en-US", onFinalTranscript }: UseVoiceInp
     abortListening,
     clearError,
   } = useSpeechToText({
-    continuous: isContinuous,
+    continuous: false, // Single-shot mode on desktop eliminates network streaming socket drops
     interimResults: true,
     language: lang,
   });
-
-  const inputLevel = useAudioMeter(isListening ? microphoneStream : null, debug);
-
-  // Handle results declaratively
-  useEffect(() => {
-    results.forEach((res) => {
-      if (!res.isFinal) return;
-      const key = `${res.timestamp.getTime()}-${res.transcript}`;
-      if (processedResultsRef.current.has(key)) return;
-      processedResultsRef.current.add(key);
-      networkRetriesRef.current = 0;
-      setIsContinuous(true);
-      debug("final-result", res.transcript);
-      onFinalTranscript(res.transcript);
-    });
-  }, [results, onFinalTranscript, debug]);
-
-  // Handle errors and recovery declaratively
-  useEffect(() => {
-    if (!recognitionError) return;
-    const code = normalizeErrorCode(recognitionError.code);
-    debug("error", `${code}: ${recognitionError.message}`);
-
-    if (code === "network" && isVoiceActive) {
-      networkRetriesRef.current += 1;
-      debug("network-retry", `attempt ${networkRetriesRef.current}`);
-      
-      if (networkRetriesRef.current >= 2) {
-        setIsContinuous(false);
-        debug("fallback-activated", "switching to single-shot mode");
-      }
-
-      const timer = setTimeout(() => {
-        if (isVoiceActive) {
-          clearError();
-          startLibrary();
-        }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [recognitionError, isVoiceActive, startLibrary, clearError, debug]);
-
-  const startListening = useCallback(async () => {
-    debug("start-requested");
-    if (!isSupported) {
-      setLocalError("Speech recognition not supported.");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setMicrophoneStream(stream);
-      setIsVoiceActive(true);
-      setLocalError(undefined);
-      clearError();
-      networkRetriesRef.current = 0;
-      setIsContinuous(true);
-      startLibrary();
-    } catch (err) {
-      debug("mic-denied", err instanceof Error ? err.message : String(err));
-      setLocalError("Microphone access denied.");
-    }
-  }, [isSupported, startLibrary, clearError, debug]);
 
   const stopListening = useCallback(() => {
     debug("stop-requested");
     setIsVoiceActive(false);
     stopLibrary();
     abortListening();
-    if (microphoneStream) {
-      microphoneStream.getTracks().forEach((t) => t.stop());
-      setMicrophoneStream(null);
+  }, [stopLibrary, abortListening, debug]);
+
+  // Safe mock/active meter animation when listening
+  useEffect(() => {
+    if (isVoiceActive && isListening) {
+      mockMeterIntervalRef.current = setInterval(() => {
+        setInputLevel(0.2 + Math.random() * 0.6);
+      }, 100);
+    } else {
+      if (mockMeterIntervalRef.current) {
+        clearInterval(mockMeterIntervalRef.current);
+        mockMeterIntervalRef.current = null;
+      }
+      queueMicrotask(() => setInputLevel(0));
     }
-  }, [stopLibrary, abortListening, microphoneStream, debug]);
+    return () => {
+      if (mockMeterIntervalRef.current) clearInterval(mockMeterIntervalRef.current);
+    };
+  }, [isVoiceActive, isListening]);
+
+  // Handle final transcription results declaratively
+  useEffect(() => {
+    results.forEach((res) => {
+      if (!res.isFinal) return;
+      const key = `${res.timestamp.getTime()}-${res.transcript}`;
+      if (processedResultsRef.current.has(key)) return;
+      processedResultsRef.current.add(key);
+      debug("final-result", res.transcript);
+      onFinalTranscript(res.transcript);
+      stopListening();
+    });
+  }, [results, onFinalTranscript, debug, stopListening]);
+
+  // Handle errors declaratively
+  useEffect(() => {
+    if (!recognitionError) return;
+    const code = normalizeErrorCode(recognitionError.code);
+    debug("error", `${code}: ${recognitionError.message}`);
+  }, [recognitionError, debug]);
+
+  const startListening = useCallback(() => {
+    debug("start-requested");
+    if (!isSupported) {
+      setLocalError("Speech recognition not supported in this browser.");
+      return;
+    }
+
+    setLocalError(undefined);
+    clearError();
+    processedResultsRef.current.clear();
+    setIsVoiceActive(true);
+    
+    try {
+      startLibrary();
+    } catch (err) {
+      debug("start-throw", err instanceof Error ? err.message : String(err));
+      setLocalError("Voice input could not start. Please try again.");
+      setIsVoiceActive(false);
+    }
+  }, [isSupported, startLibrary, clearError, debug]);
 
   const displayError = useMemo(() => {
     if (localError) return localError;
-    if (recognitionError) return getFriendlyErrorMessage(recognitionError.code);
+    if (recognitionError && normalizeErrorCode(recognitionError.code) !== "no-speech") {
+      return getFriendlyErrorMessage(recognitionError.code);
+    }
     return undefined;
   }, [localError, recognitionError]);
 
