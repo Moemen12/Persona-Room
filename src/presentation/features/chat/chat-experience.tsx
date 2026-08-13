@@ -73,7 +73,6 @@ interface ChatClientState {
   setupError?: string;
   viewerCount: number;
   isSelectorOpen: boolean;
-  isChangingCompanion: boolean;
   hintedCompanionId?: CompanionId;
 }
 
@@ -92,7 +91,6 @@ type ChatClientAction =
   | { type: "set-setup-error"; error: string }
   | { type: "set-viewer-count"; count: number }
   | { type: "set-selector-open"; open: boolean }
-  | { type: "set-changing-companion"; changing: boolean }
   | { type: "assistant-response-pending" }
   | { type: "assistant-response-started"; assistantId: string }
   | { type: "assistant-playback-started"; assistantId: string }
@@ -138,8 +136,6 @@ function chatClientReducer(
       return { ...state, viewerCount: action.count };
     case "set-selector-open":
       return { ...state, isSelectorOpen: action.open };
-    case "set-changing-companion":
-      return { ...state, isChangingCompanion: action.changing };
     case "assistant-response-pending":
       return {
         ...state,
@@ -205,7 +201,6 @@ const initialChatState: ChatClientState = {
   draft: "",
   viewerCount: 0,
   isSelectorOpen: false,
-  isChangingCompanion: false,
   hintedCompanionId: getSafeCompanionHint(CHAT_AUTH_STORAGE_KEY),
 };
 
@@ -461,7 +456,7 @@ export function ChatExperience() {
       dispatch({ type: "set-selector-open", open: false });
       return;
     }
-    if (state.isChangingCompanion || sessionState.status === "pending") return;
+    if (sessionState.status === "pending") return;
 
     stop();
     stopSpeaking();
@@ -490,7 +485,7 @@ export function ChatExperience() {
 
   const isLoading = !state.identity && !state.setupError;
   const isStreaming = status === "submitted" || status === "streaming";
-  const visibleChatError = error ? formatChatError(error) : state.setupError;
+  const visibleChatError = error ? formatChatError(error) : undefined;
 
   const { proactiveHint } = useChatProactivity({
     messages,
@@ -549,7 +544,7 @@ export function ChatExperience() {
       {state.isSelectorOpen && state.identity ? (
           <CompanionPicker
             currentSelection={currentSelection}
-            isChanging={state.isChangingCompanion}
+            isChanging={sessionState.status === "pending"}
             onSelect={selection => void chooseCompanion(selection)}
             onClose={() => dispatch({ type: "set-selector-open", open: false })}
           />

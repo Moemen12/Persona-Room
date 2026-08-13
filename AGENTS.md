@@ -30,7 +30,7 @@ Apply a **free-first rule** to every feature: prefer browser-native Web APIs, lo
 
 ## React and Frontend Standards
 
-Favor intentional, premium, accessible UI over generic SaaS boilerplate. The product must work on desktop and mobile, with mobile prioritizing the main information and primary action. Preserve visible focus states and keyboard access.
+Favor intentional, clear, accessible UI over generic SaaS boilerplate or decorative visual effects. Clarity comes before cinematic treatment: use restrained color, strong hierarchy, readable copy, predictable spacing, and explicit loading/error states. The product must work on desktop and mobile, with mobile prioritizing the main information and primary action. Preserve visible focus states and keyboard access.
 
 Do not call `useEffect` directly in normal component code. Prefer derived render state, event handlers, server patterns, and remount semantics. Mount-only synchronization is permitted only for genuine external synchronization such as a browser subscription or third-party lifecycle; use a small named helper with cleanup when repeated. For async client synchronization, use `AbortController` cleanup and never commit results after the signal is aborted. AbortError is an expected cancellation path for voice and must be swallowed by queue workers and detached promises; it must never surface as an unhandled rejection.
 

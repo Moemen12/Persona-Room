@@ -31,7 +31,7 @@ export function AudienceHeader({ companionId, language, personalityId, viewerCou
     <header className="audience-header">
       <div>
         <span className="eyebrow"><Sparkles aria-hidden="true" size={13} /> {companion.name.toUpperCase()}’S ROOM</span>
-        <h1>Shape the next moment together.</h1>
+        <h1>Help shape the next reply.</h1>
         <span className="audience-header__identity">
           <LockKeyhole aria-hidden="true" size={12} /> {roomLanguage.nativeLabel} · {personality.name} personality
         </span>

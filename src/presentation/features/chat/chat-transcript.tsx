@@ -93,7 +93,6 @@ export function ChatTranscript({
               voiceSyncEnabled &&
               isAssistant &&
               isLatestMessage &&
-              narration.assistantId === message.id &&
               narration.waiting &&
               !narration.started &&
               !narration.completed;

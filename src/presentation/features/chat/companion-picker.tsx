@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Sparkles, X } from "lucide-react";
+import { Check, LoaderCircle, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -161,8 +161,18 @@ export function CompanionPicker({
           type="button"
           onClick={() => onSelect(selection)}
           disabled={isChanging}
+          aria-busy={isChanging}
         >
-          {isChanging ? "Tuning the room..." : isSameSelection ? "Keep this room" : "Open this room"}
+          {isChanging ? (
+            <>
+              <LoaderCircle aria-hidden="true" size={16} className="spin" />
+              <span>Opening your room…</span>
+            </>
+          ) : isSameSelection ? (
+            "Keep this room"
+          ) : (
+            "Open this room"
+          )}
         </button>
       </div>
     </section>

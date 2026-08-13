@@ -48,15 +48,13 @@ export function AudienceSpotlight({
           <span className="presence-pulse" aria-hidden="true" />
           <span>SHARED MOMENT</span>
         </div>
-        <p>
-          You can steer {companion.name}&apos;s next moment, react live, and leave the room with a story you helped create.
-        </p>
+        <p>Send a cue and {companion.name} will use it in the next reply.</p>
         <span>
           {isPerforming
             ? `${companion.name} is answering the room`
             : isListening
               ? `${companion.name} is listening closely`
-              : `The room is open — send a cue when you feel it`}
+              : `Everyone sees how the room responds`}
         </span>
       </div>
       <div className="audience-spotlight__mood" role="status">
