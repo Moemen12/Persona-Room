@@ -98,6 +98,25 @@ export async function publishAudienceReaction(
   });
 }
 
+export async function publishBatchedReactions(
+  sessionId: string,
+  reactions: AudienceReaction[],
+) {
+  const { session } = await getInternalUserForSession(sessionId);
+  if (!session.audienceEnabled) throw new NotFoundError("Room");
+
+  // Broadcast each reaction in the batch
+  // In a high-traffic scenario, we could also broadcast the whole array
+  // but for the UI animation to trigger correctly on other clients, 
+  // sending them individually or as a compact event is fine.
+  // We'll send one event with the list to minimize Supabase messages.
+  await broadcastRoomEvent(sessionId, {
+    type: "audience-reaction",
+    reactions,
+    batchId: crypto.randomUUID(),
+  });
+}
+
 export async function submitVote(
   sessionId: string,
   option: VoteOption,

@@ -35,8 +35,10 @@ export type RoomBroadcast = {
   option?: VoteOption;
 } | {
   type: "audience-reaction";
-  reaction: AudienceReaction;
-  reactionId: string;
+  reaction?: AudienceReaction;
+  reactions?: AudienceReaction[];
+  reactionId?: string;
+  batchId?: string;
 } | {
   type: "companion-changed";
   companionId: CompanionId;

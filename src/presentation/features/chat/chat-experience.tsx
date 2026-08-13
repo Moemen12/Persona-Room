@@ -361,10 +361,17 @@ export function ChatExperience() {
     onEvent: (event: RoomBroadcast) => {
       if (event.type === "companion-changed") return;
       if (event.type === "audience-reaction") {
-        const definition = AUDIENCE_REACTIONS.find(
-          item => item.value === event.reaction
-        );
-        triggerReaction(event.reaction, definition?.emoji ?? "✨");
+        if (event.reactions) {
+          event.reactions.forEach(r => {
+            const definition = AUDIENCE_REACTIONS.find(item => item.value === r);
+            triggerReaction(r, definition?.emoji ?? "✨");
+          });
+        } else if (event.reaction) {
+          const definition = AUDIENCE_REACTIONS.find(
+            item => item.value === event.reaction
+          );
+          triggerReaction(event.reaction, definition?.emoji ?? "✨");
+        }
         return;
       }
       if (event.type === "vote-tally" || event.type === "persona-reaction") {

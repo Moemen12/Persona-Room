@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { audienceReactionSchema } from "@/features/audience/audience.schemas";
-import { publishAudienceReaction, submitVote } from "@/features/audience/audience.service";
+import { audienceReactionSchema, batchedReactionsSchema } from "@/features/audience/audience.schemas";
+import { publishAudienceReaction, publishBatchedReactions, submitVote } from "@/features/audience/audience.service";
 import type { AudienceReaction, VoteOption } from "@/lib/config/app";
 
 export async function submitAudienceReactionAction(
@@ -18,6 +18,22 @@ export async function submitAudienceReactionAction(
     return {
       success: false as const,
       error: error instanceof Error ? error.message : "That reaction did not land. Try again.",
+    };
+  }
+}
+
+export async function submitBatchedReactionsAction(
+  sessionId: string,
+  reactions: AudienceReaction[],
+) {
+  try {
+    const parsed = batchedReactionsSchema.parse({ reactions });
+    await publishBatchedReactions(sessionId, parsed.reactions);
+    return { success: true as const };
+  } catch (error) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Reactions could not be synced.",
     };
   }
 }

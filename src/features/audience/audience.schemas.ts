@@ -10,3 +10,7 @@ export const voteRequestSchema = z.object({
 export const audienceReactionSchema = z.object({
   reaction: z.enum(AUDIENCE_REACTIONS.map((reaction) => reaction.value)),
 });
+
+export const batchedReactionsSchema = z.object({
+  reactions: z.array(z.enum(AUDIENCE_REACTIONS.map((r) => r.value))).max(50),
+});

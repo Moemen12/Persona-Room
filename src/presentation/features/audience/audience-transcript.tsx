@@ -1,13 +1,13 @@
 "use client";
 
 import { Radio } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import type { RoomBroadcast, RoomSnapshot } from "@/features/audience";
 import { AUDIENCE_REACTIONS, type AudienceReaction } from "@/lib/config/app";
 import { sortRoomMessages } from "@/lib/message-order";
 import type { PersonaMood } from "@/features/persona";
-import { submitAudienceReactionAction } from "@/actions/audience.actions";
+import { submitBatchedReactionsAction } from "@/actions/audience.actions";
 import { MessageBubble } from "@/presentation/components/message-bubble";
 import { useAudienceReaction } from "@/presentation/hooks/use-audience-reaction";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
@@ -40,6 +40,9 @@ export function AudienceTranscript({
   const [isPerformerThinking, setIsPerformerThinking] = useState(false);
   const [, startReactionTransition] = useTransition();
   const { reactions, triggerReaction } = useAudienceReaction();
+  const reactionBufferRef = useRef<AudienceReaction[]>([]);
+  const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const transcriptRef = useTranscriptAutoScroll({
     messageCount: snapshot.messages.length,
     lastMessageId: snapshot.messages.at(-1)?.id,
@@ -67,8 +70,15 @@ export function AudienceTranscript({
 
       if (event.type === "audience-reaction") {
         onPerformance?.();
-        const definition = AUDIENCE_REACTIONS.find((item) => item.value === event.reaction);
-        triggerReaction(event.reaction, definition?.emoji ?? "✨");
+        if (event.reactions) {
+          event.reactions.forEach((r) => {
+            const definition = AUDIENCE_REACTIONS.find((item) => item.value === r);
+            triggerReaction(r, definition?.emoji ?? "✨");
+          });
+        } else if (event.reaction) {
+          const definition = AUDIENCE_REACTIONS.find((item) => item.value === event.reaction);
+          triggerReaction(event.reaction, definition?.emoji ?? "✨");
+        }
         return;
       }
 
@@ -115,10 +125,29 @@ export function AudienceTranscript({
   const handleReaction = (nextReaction: AudienceReaction) => {
     const definition = AUDIENCE_REACTIONS.find((item) => item.value === nextReaction);
     triggerReaction(nextReaction, definition?.emoji ?? "✨");
-    startReactionTransition(async () => {
-      await submitAudienceReactionAction(roomId, nextReaction);
-    });
+
+    // Add to buffer for senior-level batching
+    reactionBufferRef.current.push(nextReaction);
+
+    if (!flushTimeoutRef.current) {
+      flushTimeoutRef.current = setTimeout(() => {
+        const batch = [...reactionBufferRef.current];
+        reactionBufferRef.current = [];
+        flushTimeoutRef.current = null;
+
+        startReactionTransition(async () => {
+          await submitBatchedReactionsAction(roomId, batch);
+        });
+      }, 500); // 500ms window to accumulate clicks
+    }
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current);
+    };
+  }, []);
 
   return (
     <section className="audience-transcript">
