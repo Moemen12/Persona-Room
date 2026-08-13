@@ -43,11 +43,10 @@ export function ChatTranscript({
   mood: _mood,
   proactiveHint,
   narration,
-  voiceSyncEnabled,
+  voiceSyncEnabled: _voiceSyncEnabled,
 }: ChatTranscriptProps) {
   const companion = COMPANIONS[companionId];
   const latestMessage = messages.at(-1);
-  const previousMessage = messages.at(-2);
   const latestMessageText = latestMessage ? messageText(latestMessage) : "";
   const messageListRef = useTranscriptAutoScroll({
     messageCount: messages.length,
@@ -81,21 +80,13 @@ export function ChatTranscript({
             const rawContent = messageText(message);
             const isLatestMessage = message === messages[messages.length - 1];
             const isAssistant = message.role === "assistant";
-            const isVoiceGated =
-              voiceSyncEnabled &&
-              isAssistant &&
-              isLatestMessage &&
-              previousMessage?.role === "user" &&
-              narration.waiting &&
-              !narration.completed;
-            const hasStartedPlayback =
-              narration.started && narration.assistantId === message.id;
-            const content = isVoiceGated && !hasStartedPlayback ? "" : rawContent;
+            // Render text immediately without voice gating to prevent response stalls
+            const content = rawContent;
             const bubbleRole = isAssistant ? "assistant" : "user";
             const bubbleIsStreaming =
               isLatestMessage &&
               isAssistant &&
-              (isStreaming || (isVoiceGated && !narration.started));
+              isStreaming;
             const shouldAnimateFreshReply =
               isLatestMessage &&
               isAssistant &&
