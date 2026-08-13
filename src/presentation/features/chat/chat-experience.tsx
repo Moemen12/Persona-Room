@@ -2,7 +2,7 @@
 
 import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { type FormEvent, useCallback, useReducer, useState } from "react";
+import { type FormEvent, useCallback, useReducer, useState, useActionState, useEffect } from "react";
 
 import type { RoomBroadcast } from "@/features/audience";
 import type { SessionBootstrap } from "@/features/auth";
@@ -25,6 +25,7 @@ import { AudienceReactionOverlay } from "@/presentation/features/audience/audien
 import { useAudienceReaction } from "@/presentation/hooks/use-audience-reaction";
 import { useRoomRealtime } from "@/presentation/hooks/use-room-realtime";
 import { formatChatError } from "@/presentation/lib/chat-error";
+import { updateCompanionAction, type SessionState } from "@/actions/session.actions";
 
 import { ChatComposer } from "./chat-composer";
 import { ChatHeader } from "./chat-header";
@@ -221,8 +222,11 @@ function messageText(message: UIMessage) {
     .join("");
 }
 
+const initialSessionState: SessionState = { status: "idle" };
+
 export function ChatExperience() {
   const [state, dispatch] = useReducer(chatClientReducer, initialChatState);
+  const [sessionState, runUpdateCompanion] = useActionState(updateCompanionAction, initialSessionState);
   const { reaction, triggerReaction } = useAudienceReaction();
   const { play } = useInterfaceSound();
   const companionId =
@@ -387,6 +391,32 @@ export function ChatExperience() {
     },
   });
 
+  // Handle companion update success declaratively
+  useEffect(() => {
+    if (sessionState.status === "success" && sessionState.bootstrap) {
+      const bootstrap = sessionState.bootstrap;
+      setMessages(bootstrap.messages.map(asUiMessage));
+      dispatch({ type: "companion-updated", bootstrap, mood: bootstrap.mood });
+      if (state.identity) {
+        setSafeChatAuth(CHAT_AUTH_STORAGE_KEY, {
+          sessionId: bootstrap.session.id,
+          accessToken: state.identity.accessToken,
+          companionId: bootstrap.session.companionId,
+        });
+      }
+      window.localStorage.setItem(
+        `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`,
+        "confirmed"
+      );
+      play("share");
+    } else if (sessionState.status === "error") {
+      dispatch({
+        type: "set-setup-error",
+        error: sessionState.error || "The companion change could not be saved.",
+      });
+    }
+  }, [sessionState, play, state.identity, setMessages]);
+
   const chooseCompanion = async (companionId: CompanionId) => {
     if (!state.identity) return;
     const currentCompanionId = state.identity.bootstrap.session.companionId;
@@ -398,53 +428,16 @@ export function ChatExperience() {
       dispatch({ type: "set-selector-open", open: false });
       return;
     }
-    if (state.isChangingCompanion) return;
-    dispatch({ type: "set-changing-companion", changing: true });
-    try {
-      const response = await fetch(appRoutes.api.session, {
-        method: "PUT",
-        headers: {
-          authorization: `Bearer ${state.identity.accessToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          sessionId: state.identity.bootstrap.session.id,
-          companionId,
-        }),
-      });
-      if (!response.ok) throw new Error("Companion update failed");
-      stop();
-      stopSpeaking();
-      const bootstrapResponse = await fetch(appRoutes.api.session, {
-        method: "POST",
-        headers: { authorization: `Bearer ${state.identity.accessToken}` },
-      });
-      if (!bootstrapResponse.ok) throw new Error("Companion refresh failed");
-      const bootstrapResult = (await bootstrapResponse.json()) as {
-        data: SessionBootstrap;
-      };
-      const bootstrap = bootstrapResult.data;
-      setMessages(bootstrap.messages.map(asUiMessage));
-      dispatch({ type: "companion-updated", bootstrap, mood: bootstrap.mood });
-      setSafeChatAuth(CHAT_AUTH_STORAGE_KEY, {
-        sessionId: bootstrap.session.id,
-        accessToken: state.identity.accessToken,
-        companionId: bootstrap.session.companionId,
-      });
-      window.localStorage.setItem(
-        `${COMPANION_SELECTION_KEY}:${bootstrap.session.id}`,
-        "confirmed"
-      );
-      play("share");
-    } catch (companionError) {
-      dispatch({
-        type: "set-setup-error",
-        error: "The companion change could not be saved. Please try again.",
-      });
-      console.error(companionError);
-    } finally {
-      dispatch({ type: "set-changing-companion", changing: false });
-    }
+    if (state.isChangingCompanion || sessionState.status === "pending") return;
+
+    stop();
+    stopSpeaking();
+
+    const formData = new FormData();
+    formData.append("accessToken", state.identity.accessToken);
+    formData.append("sessionId", state.identity.bootstrap.session.id);
+    formData.append("companionId", companionId);
+    runUpdateCompanion(formData);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {

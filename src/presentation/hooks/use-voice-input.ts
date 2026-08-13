@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useActionState } from "react";
 
-import { appRoutes } from "@/infrastructure/config/routes";
+import { transcribeAction, type TranscriptionState } from "@/actions/voice.actions";
 
 export interface VoiceDebugEvent {
   at: string;
@@ -17,11 +17,11 @@ interface UseVoiceInputOptions {
   sessionId?: string;
 }
 
-type VoiceStateStatus = "idle" | "recording" | "transcribing" | "error";
+type VoiceStateStatus = "idle" | "recording" | "error";
 
 interface VoiceState {
   status: VoiceStateStatus;
-  error?: string;
+  localError?: string;
   inputLevel: number;
   debugEvents: VoiceDebugEvent[];
 }
@@ -29,9 +29,7 @@ interface VoiceState {
 type VoiceAction =
   | { type: "START_RECORDING" }
   | { type: "STOP_RECORDING" }
-  | { type: "START_TRANSCRIBING" }
-  | { type: "TRANSCRIPTION_SUCCESS" }
-  | { type: "SET_ERROR"; error: string }
+  | { type: "SET_LOCAL_ERROR"; error: string }
   | { type: "SET_INPUT_LEVEL"; level: number }
   | { type: "ADD_DEBUG"; event: string; detail?: string };
 
@@ -44,15 +42,11 @@ const initialState: VoiceState = {
 function voiceReducer(state: VoiceState, action: VoiceAction): VoiceState {
   switch (action.type) {
     case "START_RECORDING":
-      return { ...state, status: "recording", error: undefined };
+      return { ...state, status: "recording", localError: undefined };
     case "STOP_RECORDING":
       return { ...state, status: "idle", inputLevel: 0 };
-    case "START_TRANSCRIBING":
-      return { ...state, status: "transcribing", inputLevel: 0 };
-    case "TRANSCRIPTION_SUCCESS":
-      return { ...state, status: "idle", error: undefined };
-    case "SET_ERROR":
-      return { ...state, status: "error", error: action.error, inputLevel: 0 };
+    case "SET_LOCAL_ERROR":
+      return { ...state, status: "error", localError: action.error, inputLevel: 0 };
     case "SET_INPUT_LEVEL":
       return { ...state, inputLevel: action.level };
     case "ADD_DEBUG": {
@@ -64,7 +58,6 @@ function voiceReducer(state: VoiceState, action: VoiceAction): VoiceState {
   }
 }
 
-const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
 const AUDIO_MIME_TYPES = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -83,6 +76,11 @@ function getAudioContextConstructor() {
   return window.AudioContext ?? audioWindow.webkitAudioContext;
 }
 
+const initialTranscriptionState: TranscriptionState = { status: "idle" };
+
+/**
+ * Senior-level declarative voice hook using React 19 useActionState and a useReducer state machine.
+ */
 export function useVoiceInput({
   accessToken,
   companionId,
@@ -91,10 +89,12 @@ export function useVoiceInput({
 }: UseVoiceInputOptions) {
   const [state, dispatch] = useReducer(voiceReducer, initialState);
 
+  // React 19 Server Action integration
+  const [transcription, runTranscription] = useActionState(transcribeAction, initialTranscriptionState);
+
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const uploadControllerRef = useRef<AbortController | null>(null);
   const captureCounterRef = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -124,7 +124,15 @@ export function useVoiceInput({
     }
   }, []);
 
-  // Declarative audio metering when recording
+  // Handle successful transcription declaratively
+  useEffect(() => {
+    if (transcription.status === "success" && transcription.transcript) {
+      debug("transcription-completed", transcription.transcript);
+      onFinalTranscript(transcription.transcript);
+    }
+  }, [transcription.status, transcription.transcript, onFinalTranscript, debug]);
+
+  // Audio metering effect
   useEffect(() => {
     if (state.status !== "recording" || !mediaStreamRef.current) {
       stopMeter();
@@ -134,7 +142,7 @@ export function useVoiceInput({
     const stream = mediaStreamRef.current;
     const AudioContextConstructor = getAudioContextConstructor();
     if (!AudioContextConstructor) {
-      debug("meter-unavailable", "AudioContext unavailable");
+      debug("meter-unavailable");
       return;
     }
 
@@ -146,7 +154,6 @@ export function useVoiceInput({
     audioContextRef.current = context;
     analyserRef.current = analyser;
     const samples = new Uint8Array(analyser.fftSize);
-    debug("meter-started");
 
     const update = () => {
       if (!analyserRef.current) return;
@@ -164,85 +171,20 @@ export function useVoiceInput({
     return () => stopMeter();
   }, [state.status, debug, stopMeter]);
 
-  const transcribeCapture = useCallback(async (audio: Blob, captureId: number) => {
-    if (!accessToken || !sessionId) {
-      dispatch({ type: "SET_ERROR", error: "Voice session unavailable. Please refresh." });
-      debug("transcription-skipped", "missing credentials");
-      return;
-    }
-
-    if (audio.size === 0 || audio.size > MAX_AUDIO_BYTES) {
-      dispatch({
-        type: "SET_ERROR",
-        error: audio.size === 0 ? "No audio captured." : "Voice clip too large.",
-      });
-      debug("transcription-skipped", `size=${audio.size}`);
-      return;
-    }
-
-    const controller = new AbortController();
-    uploadControllerRef.current = controller;
-    dispatch({ type: "START_TRANSCRIBING" });
-    debug("transcription-started", `capture=${captureId}, bytes=${audio.size}`);
-
-    try {
-      const formData = new FormData();
-      formData.append("audio", audio, `voice-${captureId}.webm`);
-      formData.append("accessToken", accessToken);
-      formData.append("sessionId", sessionId);
-      formData.append("companionId", companionId);
-
-      const response = await fetch(appRoutes.api.voiceTranscribe, {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-
-      const payload = (await response.json().catch(() => undefined)) as
-        | { data?: { transcript?: string }; error?: { message?: string } }
-        | undefined;
-
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? `Transcription failed (${response.status})`);
-      }
-      if (controller.signal.aborted) return;
-
-      const transcript = payload?.data?.transcript?.trim() ?? "";
-      if (!transcript) {
-        dispatch({ type: "SET_ERROR", error: "I didn't catch that. Please try again." });
-        debug("transcription-empty");
-        return;
-      }
-
-      debug("transcription-completed", transcript);
-      dispatch({ type: "TRANSCRIPTION_SUCCESS" });
-      onFinalTranscript(transcript);
-    } catch (cause) {
-      if (cause instanceof DOMException && cause.name === "AbortError") return;
-      const message = cause instanceof Error ? cause.message : "Transcription failed.";
-      dispatch({ type: "SET_ERROR", error: message });
-      debug("transcription-failed", message);
-    } finally {
-      if (uploadControllerRef.current === controller) {
-        uploadControllerRef.current = null;
-      }
-    }
-  }, [accessToken, companionId, debug, onFinalTranscript, sessionId]);
-
   const startListening = useCallback(async () => {
     if (state.status !== "idle" && state.status !== "error") return;
     if (!accessToken || !sessionId) {
-      dispatch({ type: "SET_ERROR", error: "Voice session unavailable." });
+      dispatch({ type: "SET_LOCAL_ERROR", error: "Voice session unavailable." });
       return;
     }
     if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      dispatch({ type: "SET_ERROR", error: "Voice input not supported in this browser." });
+      dispatch({ type: "SET_LOCAL_ERROR", error: "Voice input not supported." });
       return;
     }
 
     const mimeType = getSupportedMimeType();
     if (!mimeType) {
-      dispatch({ type: "SET_ERROR", error: "Audio recording format not supported." });
+      dispatch({ type: "SET_LOCAL_ERROR", error: "Recording format not supported." });
       return;
     }
 
@@ -260,7 +202,7 @@ export function useVoiceInput({
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       recorder.onerror = () => {
-        dispatch({ type: "SET_ERROR", error: "Recording failed." });
+        dispatch({ type: "SET_LOCAL_ERROR", error: "Recording failed." });
         debug("capture-error");
         recorderRef.current = null;
         releaseStream();
@@ -271,7 +213,14 @@ export function useVoiceInput({
         recorderRef.current = null;
         releaseStream();
         debug("capture-stopped", `bytes=${audio.size}`);
-        void transcribeCapture(audio, captureId);
+
+        // Trigger Server Action
+        const formData = new FormData();
+        formData.append("audio", audio, "voice.webm");
+        formData.append("accessToken", accessToken);
+        formData.append("sessionId", sessionId);
+        formData.append("companionId", companionId);
+        runTranscription(formData);
       };
 
       dispatch({ type: "START_RECORDING" });
@@ -281,10 +230,10 @@ export function useVoiceInput({
       const message = cause instanceof DOMException && cause.name === "NotAllowedError"
         ? "Microphone permission denied."
         : "Could not start microphone.";
-      dispatch({ type: "SET_ERROR", error: message });
+      dispatch({ type: "SET_LOCAL_ERROR", error: message });
       debug("capture-start-failed", message);
     }
-  }, [accessToken, debug, releaseStream, sessionId, state.status, transcribeCapture]);
+  }, [accessToken, debug, releaseStream, sessionId, state.status, companionId, runTranscription]);
 
   const stopListening = useCallback(() => {
     const recorder = recorderRef.current;
@@ -297,9 +246,7 @@ export function useVoiceInput({
     }
   }, [debug, releaseStream]);
 
-  // Cleanup on unmount
   useEffect(() => () => {
-    uploadControllerRef.current?.abort();
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== "inactive") recorder.stop();
     releaseStream();
@@ -308,12 +255,12 @@ export function useVoiceInput({
 
   return {
     debugEvents: state.debugEvents,
-    error: state.error,
+    error: state.localError || (transcription.status === "error" ? transcription.error : undefined),
     inputLevel: state.inputLevel,
-    interimTranscript: state.status === "transcribing" ? "Transcribing your voice…" : "",
+    interimTranscript: transcription.status === "pending" ? "Transcribing your voice…" : "",
     isListening: state.status === "recording",
     isSupported: typeof window !== "undefined" && "MediaRecorder" in window && "mediaDevices" in navigator,
-    isTranscribing: state.status === "transcribing",
+    isTranscribing: transcription.status === "pending",
     startListening,
     stopListening,
   };

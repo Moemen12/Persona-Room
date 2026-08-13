@@ -111,7 +111,7 @@ async function persistConversation(
         0,
         APP_CONFIG.memoryLimit,
       );
-      
+
       const overflow = await dependencies.findOldMemoriesForCleanup(userId, APP_CONFIG.memoryLimit);
       if (overflow.length) {
         await dependencies.deleteMemoriesByIds(overflow.map((row) => Number(row.id)));

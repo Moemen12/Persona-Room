@@ -72,6 +72,27 @@ export async function streamRinaResponse(input: {
   });
 }
 
+export async function transcribeAudio(audioBuffer: Buffer, mimeType: string): Promise<string> {
+  const base64Audio = audioBuffer.toString("base64");
+  const response = await getGeminiClient().models.generateContent({
+    model: getGeminiModel(),
+    contents: [
+      {
+        inlineData: {
+          mimeType: mimeType || "audio/webm",
+          data: base64Audio,
+        },
+      },
+      {
+        text: "Transcribe the spoken words exactly. Return only the transcription, with no quotes, explanation, or additional text. Preserve the speaker's language.",
+      },
+    ],
+  });
+
+  const transcript = (response.text ?? "").trim();
+  return transcript.replace(/^['"`]([\s\S]*)['"`]$/u, "$1");
+}
+
 export const GEMINI_RUNTIME = {
   model: "GEMINI_MODEL",
   suggestedDefault: "gemini-2.5-flash-lite",
