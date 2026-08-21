@@ -58,6 +58,28 @@ async function readResponseError(response: Response) {
   );
 }
 
+function isSupabaseNetworkError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return [
+    "failed to fetch",
+    "networkerror",
+    "network error",
+    "err_name_not_resolved",
+    "err_failed",
+    "fetch failed",
+  ].some(fragment => message.includes(fragment));
+}
+
+function sessionSetupErrorMessage(error: unknown) {
+  if (isSupabaseNetworkError(error)) {
+    return "Persona Room cannot reach its authentication service right now. Check that your Supabase project is active and that NEXT_PUBLIC_SUPABASE_URL is the current Project URL, then try again.";
+  }
+  return error instanceof Error && error.message
+    ? error.message
+    : "The room could not establish a secure session. Refresh and try again.";
+}
+
 interface NarrationState {
   assistantId?: string;
   started: boolean;
@@ -298,9 +320,13 @@ export function ChatExperience() {
   useMountEffect(() => {
     const controller = new AbortController();
     const initialize = async () => {
+      let supabase: ReturnType<typeof getSupabaseBrowserClient> | undefined;
       try {
-        const supabase = getSupabaseBrowserClient();
+        supabase = getSupabaseBrowserClient();
         const initialSession = await supabase.auth.getSession();
+        if (initialSession.error && !initialSession.data.session) {
+          throw initialSession.error;
+        }
         let session = initialSession.data.session;
         if (!session) {
           const anonymous = await supabase.auth.signInAnonymously();
@@ -355,12 +381,12 @@ export function ChatExperience() {
         setMessages(bootstrap.messages.map(asUiMessage));
       } catch (initializationError) {
         if (!controller.signal.aborted) {
+          if (supabase && isSupabaseNetworkError(initializationError)) {
+            await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+          }
           dispatch({
             type: "set-setup-error",
-            error:
-              initializationError instanceof Error
-                ? initializationError.message
-                : "The room could not establish a secure session. Refresh and try again.",
+            error: sessionSetupErrorMessage(initializationError),
           });
           console.error(initializationError);
         }
